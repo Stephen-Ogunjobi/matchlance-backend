@@ -9,6 +9,8 @@ export interface IMessage extends Document {
   fileName?: string;
   isRead: boolean;
   readAt?: Date;
+  status: "sent" | "delivered" | "read";
+  deliveredAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -64,6 +66,15 @@ const messageSchema = new Schema<IMessage>(
       index: true,
     },
     readAt: {
+      type: Date,
+    },
+    status: {
+      type: String,
+      enum: ["sent", "delivered", "read"],
+      default: "sent",
+      index: true,
+    },
+    deliveredAt: {
       type: Date,
     },
   },
