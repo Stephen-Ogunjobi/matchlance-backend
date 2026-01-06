@@ -8,6 +8,21 @@ import mongoose from "mongoose";
 
 dotenv.config();
 
+// Helper function to parse cookies from cookie string
+const parseCookies = (cookieString: string): Record<string, string> => {
+  const cookies: Record<string, string> = {};
+  if (!cookieString) return cookies;
+
+  cookieString.split(";").forEach((cookie) => {
+    const [name, ...rest] = cookie.trim().split("=");
+    if (name && rest.length > 0) {
+      cookies[name] = decodeURIComponent(rest.join("="));
+    }
+  });
+
+  return cookies;
+};
+
 //add userId to each socket connection
 interface AunthenticatedSocket extends Socket {
   userId?: string;
@@ -29,8 +44,25 @@ export const initializeSocket = (server: HttpServer) => {
   //authentication middleware
   io.use((socket: AunthenticatedSocket, next: (err?: Error) => void) => {
     try {
-      //get token from handshake auth or query
-      const token = socket.handshake.auth.token || socket.handshake.query.token;
+      // Get token from multiple sources (in order of priority):
+      // 1. handshake.auth.token (client explicitly sends it)
+      // 2. handshake.query.token (token in query string)
+      // 3. cookies (cookie-based authentication)
+      let token = socket.handshake.auth.token || socket.handshake.query.token;
+
+      // If no token found in auth or query, check cookies
+      if (!token) {
+        const cookieHeader = socket.handshake.headers.cookie;
+        if (cookieHeader) {
+          const cookies = parseCookies(cookieHeader);
+          // Check common cookie names for JWT token
+          token =
+            cookies.token ||
+            cookies.jwt ||
+            cookies.auth_token ||
+            cookies.accessToken;
+        }
+      }
 
       if (!token) {
         return next(new Error("authentication error: No token provided"));

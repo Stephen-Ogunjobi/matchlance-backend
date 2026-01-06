@@ -56,6 +56,7 @@ app.use("/api/chat", chatRoutes);
 
 const PORT = process.env.PORT || 3001;
 
+//initialize socket before starting server
 initializeSocket(server);
 
 connectDb().then(() => {
