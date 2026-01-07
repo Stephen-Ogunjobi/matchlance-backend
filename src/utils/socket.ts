@@ -126,6 +126,32 @@ export const initializeSocket = (server: HttpServer) => {
           userId,
           conversationId,
         });
+
+        //mark message as delivered
+        const undeliveredMessages = await Message.updateMany(
+          {
+            conversationId: new mongoose.Types.ObjectId(conversationId),
+            senderId: { $ne: new mongoose.Types.ObjectId(userId) },
+            status: "sent",
+          },
+          {
+            $set: { status: "delivered", deliveredAt: new Date() },
+          }
+        );
+
+        // Notify other user about delivery
+        if (undeliveredMessages.modifiedCount > 0) {
+          const otherUserId = conversation.participants
+            .find((p) => p.toString() !== userId.toString())
+            ?.toString();
+
+          if (otherUserId) {
+            io.to(`user:${otherUserId}`).emit("messages_delivered", {
+              conversationId,
+              count: undeliveredMessages.modifiedCount,
+            });
+          }
+        }
       } catch (error) {
         console.error("Error joining conversation:", error);
         socket.emit("error", { message: "Failed to join conversation" });
@@ -172,6 +198,7 @@ export const initializeSocket = (server: HttpServer) => {
             senderId: new mongoose.Types.ObjectId(userId),
             content,
             messageType: messageType || "text",
+            status: "sent",
             ...(fileUrl && { fileUrl }),
             ...(fileName && { fileName }),
           });
@@ -202,7 +229,25 @@ export const initializeSocket = (server: HttpServer) => {
             conversationId,
           });
 
+          //check if recipient is online and in convo room
           if (otherUserId) {
+            const recipientSocketId = onlineUsers.get(otherUserId);
+            const isInConversationRoom =
+              recipientSocketId &&
+              io.sockets.adapter.rooms.get(`conversation:${conversationId}`);
+
+            if (isInConversationRoom) {
+              message.status = "delivered";
+              message.deliveredAt = new Date();
+              await message.save();
+
+              socket.emit("message_delivered", {
+                messageId: message._id,
+                conversationId,
+                deliveredAt: message.deliveredAt,
+              });
+            }
+
             io.to(`user:${otherUserId}`).emit("conversation_update", {
               conversationId,
               lastMessage: conversation.lastMessage,
@@ -233,53 +278,75 @@ export const initializeSocket = (server: HttpServer) => {
     );
 
     //mark as read
-    socket.on("mark_as_read", async (conversationId: string) => {
-      try {
-        const conversation = await Conversation.findOne({
-          _id: new mongoose.Types.ObjectId(conversationId),
-          participants: new mongoose.Types.ObjectId(userId),
-        });
+    socket.on(
+      "mark_as_read",
+      async (data: { conversationId: string; messageId?: string }) => {
+        try {
+          const { conversationId, messageId } = data;
 
-        if (!conversation) {
-          socket.emit("error", { message: "Conversation not found" });
-          return;
-        }
+          const conversation = await Conversation.findOne({
+            _id: new mongoose.Types.ObjectId(conversationId),
+            participants: new mongoose.Types.ObjectId(userId),
+          });
 
-        await Message.updateMany(
-          {
+          if (!conversation) {
+            socket.emit("error", { message: "Conversation not found" });
+            return;
+          }
+
+          // Build query to mark messages as read
+          const query: any = {
             conversationId: new mongoose.Types.ObjectId(conversationId),
             senderId: { $ne: new mongoose.Types.ObjectId(userId) },
             isRead: false,
-          },
-          {
-            $set: { isRead: true, readAt: new Date() },
+          };
+
+          // If messageId provided, only mark messages up to that message
+          if (messageId) {
+            const targetMessage = await Message.findById(messageId);
+            if (targetMessage) {
+              query.createdAt = { $lte: targetMessage.createdAt };
+            }
           }
-        );
 
-        // Reset unread count
-        conversation.unreadCount.set(userId.toString(), 0);
-        await conversation.save();
+          // Get the messages before updating them
+          const messagesToUpdate = await Message.find(query).select("_id");
 
-        // Notify other user that their messages were read
-        const otherUserId = conversation.participants
-          .find((p) => p.toString() !== userId.toString())
-          ?.toString();
-
-        if (otherUserId) {
-          io.to(`user:${otherUserId}`).emit("messages_read", {
-            conversationId,
-            readBy: userId,
+          const result = await Message.updateMany(query, {
+            $set: {
+              isRead: true,
+              readAt: new Date(),
+              status: "read",
+            },
           });
-        }
 
-        console.log(
-          `Messages marked as read in conversation ${conversationId}`
-        );
-      } catch (error) {
-        console.log(error);
-        socket.emit("error", { message: "Couldnt mark message as read" });
+          // Reset unread count
+          conversation.unreadCount.set(userId.toString(), 0);
+          await conversation.save();
+
+          // Notify other user that their messages were read
+          const otherUserId = conversation.participants
+            .find((p) => p.toString() !== userId.toString())
+            ?.toString();
+
+          if (otherUserId && result.modifiedCount > 0) {
+            io.to(`user:${otherUserId}`).emit("messages_read", {
+              conversationId,
+              readBy: userId,
+              messageIds: messagesToUpdate.map((m) => m._id),
+              readAt: new Date(),
+            });
+          }
+
+          console.log(
+            `Messages marked as read in conversation ${conversationId}`
+          );
+        } catch (error) {
+          console.log(error);
+          socket.emit("error", { message: "Couldnt mark message as read" });
+        }
       }
-    });
+    );
 
     //disconnect//
     socket.on("disconnect", () => {
