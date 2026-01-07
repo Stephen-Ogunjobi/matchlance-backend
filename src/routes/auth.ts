@@ -14,11 +14,12 @@ import {
   verifyLogin,
 } from "../controllers/auth.js";
 import { verifyToken } from "../middlewares/middleware.js";
+import { rateLimiter } from "../middlewares/rateLimiter.js";
 import passport from "passport";
 
 const router = express.Router();
 
-router.post("/signup", postSignup);
+router.post("/signup", rateLimiter("signup"), postSignup);
 
 router.get("/google", initiateGoogleAuth);
 
@@ -28,15 +29,15 @@ router.get(
   handleGoogleCallback
 );
 
-router.post("/login", postLogin);
+router.post("/login", rateLimiter("login"), postLogin);
 
 router.post("/refresh", postRefresh);
 
 router.post("/logout", postLogout);
 
-router.post("/reset-password", postResetPassword);
+router.post("/reset-password", rateLimiter("passwordReset"), postResetPassword);
 
-router.post("/new-password", postNewPassword);
+router.post("/new-password", rateLimiter("newPassword"), postNewPassword);
 
 router.get("/verify", verifyToken, verifyLogin);
 
@@ -44,6 +45,10 @@ router.get("/me", verifyToken, getCurrentUser);
 
 router.get("/verify-email", verifyEmail);
 
-router.post("/resend-verification", resendVerificationEmail);
+router.post(
+  "/resend-verification",
+  rateLimiter("resendVerification"),
+  resendVerificationEmail
+);
 
 export default router;

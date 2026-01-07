@@ -6,6 +6,12 @@ import dotenv from "dotenv";
 import { Conversation, Message } from "../models/chat.js";
 import mongoose from "mongoose";
 import { z } from "zod";
+import {
+  socketSendMessageLimiter,
+  socketTypingLimiter,
+  socketMarkAsReadLimiter,
+  socketJoinConversationLimiter,
+} from "../middlewares/rateLimiter.js";
 
 // Zod schema for send_message validation
 const sendMessageSchema = z.object({
@@ -129,6 +135,9 @@ export const initializeSocket = (server: HttpServer) => {
     //join conversation room//
     socket.on("join_conversation", async (conversationId: string) => {
       try {
+        // Rate limit check
+        await socketJoinConversationLimiter.consume(userId);
+
         const conversation = await Conversation.findOne({
           _id: new mongoose.Types.ObjectId(conversationId),
           participants: new mongoose.Types.ObjectId(userId),
@@ -175,7 +184,14 @@ export const initializeSocket = (server: HttpServer) => {
             });
           }
         }
-      } catch (error) {
+      } catch (error: any) {
+        if (error?.remainingPoints !== undefined) {
+          socket.emit("error", {
+            message: "Rate limit exceeded. Please slow down.",
+            retryAfter: Math.ceil(error.msBeforeNext / 1000),
+          });
+          return;
+        }
         console.error("Error joining conversation:", error);
         socket.emit("error", { message: "Failed to join conversation" });
       }
@@ -195,6 +211,9 @@ export const initializeSocket = (server: HttpServer) => {
     //send real-time msg
     socket.on("send_message", async (data: unknown) => {
       try {
+        // Rate limit check
+        await socketSendMessageLimiter.consume(userId);
+
         // Validate input with Zod
         const validationResult = sendMessageSchema.safeParse(data);
 
@@ -285,7 +304,14 @@ export const initializeSocket = (server: HttpServer) => {
         }
 
         console.log(`Message sent in conversation`);
-      } catch (error) {
+      } catch (error: any) {
+        if (error?.remainingPoints !== undefined) {
+          socket.emit("error", {
+            message: "Rate limit exceeded. You're sending messages too fast.",
+            retryAfter: Math.ceil(error.msBeforeNext / 1000),
+          });
+          return;
+        }
         console.log(error);
         socket.emit("error", { message: "failed to send message" });
       }
@@ -294,14 +320,25 @@ export const initializeSocket = (server: HttpServer) => {
     //typing indicator//
     socket.on(
       "typing",
-      (data: { conversationId: string; isTyping: boolean }) => {
-        const { conversationId, isTyping } = data;
+      async (data: { conversationId: string; isTyping: boolean }) => {
+        try {
+          // Rate limit check
+          await socketTypingLimiter.consume(userId);
 
-        socket.to(`conversation:${conversationId}`).emit("user_typing", {
-          userId,
-          conversationId,
-          isTyping,
-        });
+          const { conversationId, isTyping } = data;
+
+          socket.to(`conversation:${conversationId}`).emit("user_typing", {
+            userId,
+            conversationId,
+            isTyping,
+          });
+        } catch (error: any) {
+          if (error?.remainingPoints !== undefined) {
+            // Silently ignore typing rate limits to avoid spamming errors
+            return;
+          }
+          console.error("Typing event error:", error);
+        }
       }
     );
 
@@ -310,6 +347,9 @@ export const initializeSocket = (server: HttpServer) => {
       "mark_as_read",
       async (data: { conversationId: string; messageId?: string }) => {
         try {
+          // Rate limit check
+          await socketMarkAsReadLimiter.consume(userId);
+
           const { conversationId, messageId } = data;
 
           const conversation = await Conversation.findOne({
@@ -369,7 +409,14 @@ export const initializeSocket = (server: HttpServer) => {
           console.log(
             `Messages marked as read in conversation ${conversationId}`
           );
-        } catch (error) {
+        } catch (error: any) {
+          if (error?.remainingPoints !== undefined) {
+            socket.emit("error", {
+              message: "Rate limit exceeded. Please slow down.",
+              retryAfter: Math.ceil(error.msBeforeNext / 1000),
+            });
+            return;
+          }
           console.log(error);
           socket.emit("error", { message: "Couldnt mark message as read" });
         }

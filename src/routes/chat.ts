@@ -1,5 +1,6 @@
 import express from "express";
 import { verifyToken } from "../middlewares/middleware.js";
+import { rateLimiter } from "../middlewares/rateLimiter.js";
 import {
   getChats,
   getConversationByProposal,
@@ -12,6 +13,11 @@ router.get("/proposal/:proposalId", verifyToken, getConversationByProposal);
 
 router.get("/:conversationId/messages", verifyToken, getChats);
 
-router.post("/messages", verifyToken, sendMessage);
+router.post(
+  "/messages",
+  verifyToken,
+  rateLimiter("sendMessageHttp"),
+  sendMessage
+);
 
 export default router;

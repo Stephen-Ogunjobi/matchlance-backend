@@ -1,5 +1,6 @@
 import express from "express";
 import { verifyToken } from "../middlewares/middleware.js";
+import { rateLimiter } from "../middlewares/rateLimiter.js";
 import {
   getProposal,
   getProposals,
@@ -14,6 +15,7 @@ const router = express.Router();
 router.post(
   "/job/:jobId",
   verifyToken,
+  rateLimiter("submitProposal"),
   proposalAttachUpload.array("attachments", 5),
   postProposal
 );
