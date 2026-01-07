@@ -1,10 +1,33 @@
 import type { Server as HttpServer } from "http";
 import type { Socket } from "socket.io";
 import { Server as SocketIOServer } from "socket.io";
-import jwt from "jsonwebtoken";
+import jwt, { type JwtPayload } from "jsonwebtoken";
 import dotenv from "dotenv";
 import { Conversation, Message } from "../models/chat.js";
 import mongoose from "mongoose";
+import { z } from "zod";
+
+// Zod schema for send_message validation
+const sendMessageSchema = z.object({
+  conversationId: z
+    .string({ message: "conversationId is required" })
+    .min(1, "conversationId cannot be empty")
+    .refine((val) => mongoose.Types.ObjectId.isValid(val), {
+      message: "Invalid conversationId format",
+    }),
+  content: z
+    .string({ message: "content is required" })
+    .min(1, "Message content cannot be empty")
+    .max(5000, "Message content cannot exceed 5000 characters"),
+  messageType: z
+    .enum(["text", "image", "file", "audio", "video"], {
+      message: "Invalid message type",
+    })
+    .optional()
+    .default("text"),
+  fileUrl: z.string().url("Invalid file URL").optional(),
+  fileName: z.string().max(255, "File name too long").optional(),
+});
 
 dotenv.config();
 
@@ -35,7 +58,7 @@ const onlineUsers = new Map<string, string>();
 export const initializeSocket = (server: HttpServer) => {
   const io = new SocketIOServer(server, {
     cors: {
-      origin: "http://localhost:5173",
+      origin: process.env.FRONTEND_URL || "http://localhost:5173",
       credentials: true,
       methods: ["GET", "POST"],
     },
@@ -76,7 +99,7 @@ export const initializeSocket = (server: HttpServer) => {
       const decoded = jwt.verify(
         token as string,
         process.env.JWT_SECRET
-      ) as any;
+      ) as JwtPayload;
 
       //attach userId to socket
       socket.userId = decoded.id || decoded.userId;
@@ -170,98 +193,103 @@ export const initializeSocket = (server: HttpServer) => {
     });
 
     //send real-time msg
-    socket.on(
-      "send_message",
-      async (data: {
-        conversationId: string;
-        content: string;
-        messageType?: string;
-        fileUrl?: string;
-        fileName?: string;
-      }) => {
-        try {
-          const { conversationId, content, messageType, fileUrl, fileName } =
-            data;
+    socket.on("send_message", async (data: unknown) => {
+      try {
+        // Validate input with Zod
+        const validationResult = sendMessageSchema.safeParse(data);
 
-          const conversation = await Conversation.findOne({
-            _id: new mongoose.Types.ObjectId(conversationId),
-            participants: new mongoose.Types.ObjectId(userId),
+        if (!validationResult.success) {
+          const errors = validationResult.error.issues.map((issue) => ({
+            field: issue.path.join("."),
+            message: issue.message,
+          }));
+          socket.emit("error", {
+            message: "Validation failed",
+            errors,
           });
+          return;
+        }
 
-          if (!conversation) {
-            socket.emit("error", { message: "Conversation not found" });
-            return;
-          }
+        const { conversationId, content, messageType, fileUrl, fileName } =
+          validationResult.data;
 
-          const message = await Message.create({
-            conversationId: new mongoose.Types.ObjectId(conversationId),
-            senderId: new mongoose.Types.ObjectId(userId),
-            content,
-            messageType: messageType || "text",
-            status: "sent",
-            ...(fileUrl && { fileUrl }),
-            ...(fileName && { fileName }),
-          });
+        const conversation = await Conversation.findOne({
+          _id: new mongoose.Types.ObjectId(conversationId),
+          participants: new mongoose.Types.ObjectId(userId),
+        });
 
-          await message.populate("senderId", "firstName lastName email");
+        if (!conversation) {
+          socket.emit("error", { message: "Conversation not found" });
+          return;
+        }
 
-          conversation.lastMessage = {
-            content,
-            senderId: new mongoose.Types.ObjectId(userId),
-            timestamp: new Date(),
-          };
+        const message = await Message.create({
+          conversationId: new mongoose.Types.ObjectId(conversationId),
+          senderId: new mongoose.Types.ObjectId(userId),
+          content,
+          messageType: messageType || "text",
+          status: "sent",
+          ...(fileUrl && { fileUrl }),
+          ...(fileName && { fileName }),
+        });
 
-          const otherUserId = conversation.participants
-            .find((p) => p.toString() !== userId.toString())
-            ?.toString();
+        await message.populate("senderId", "firstName lastName email");
 
-          if (otherUserId) {
-            const currentUnread =
-              conversation.unreadCount.get(otherUserId) || 0;
-            conversation.unreadCount.set(otherUserId, currentUnread + 1);
-          }
+        conversation.lastMessage = {
+          content,
+          senderId: new mongoose.Types.ObjectId(userId),
+          timestamp: new Date(),
+        };
 
-          await conversation.save();
+        const otherUserId = conversation.participants
+          .find((p) => p.toString() !== userId.toString())
+          ?.toString();
 
-          //real-time emit message
-          io.to(`conversation:${conversationId}`).emit("new_message", {
-            message,
-            conversationId,
-          });
+        if (otherUserId) {
+          const currentUnread = conversation.unreadCount.get(otherUserId) || 0;
+          conversation.unreadCount.set(otherUserId, currentUnread + 1);
+        }
 
-          //check if recipient is online and in convo room
-          if (otherUserId) {
-            const recipientSocketId = onlineUsers.get(otherUserId);
-            const isInConversationRoom =
-              recipientSocketId &&
-              io.sockets.adapter.rooms.get(`conversation:${conversationId}`);
+        await conversation.save();
 
-            if (isInConversationRoom) {
-              message.status = "delivered";
-              message.deliveredAt = new Date();
-              await message.save();
+        //real-time emit message
+        io.to(`conversation:${conversationId}`).emit("new_message", {
+          message,
+          conversationId,
+        });
 
-              socket.emit("message_delivered", {
-                messageId: message._id,
-                conversationId,
-                deliveredAt: message.deliveredAt,
-              });
-            }
+        //check if recipient is online and in convo room
+        if (otherUserId) {
+          const recipientSocketId = onlineUsers.get(otherUserId);
+          const isInConversationRoom =
+            recipientSocketId &&
+            io.sockets.adapter.rooms.get(`conversation:${conversationId}`);
 
-            io.to(`user:${otherUserId}`).emit("conversation_update", {
+          if (isInConversationRoom) {
+            message.status = "delivered";
+            message.deliveredAt = new Date();
+            await message.save();
+
+            socket.emit("message_delivered", {
+              messageId: message._id,
               conversationId,
-              lastMessage: conversation.lastMessage,
-              unreadCount: conversation.unreadCount.get(otherUserId),
+              deliveredAt: message.deliveredAt,
             });
           }
 
-          console.log(`Message sent in conversation`);
-        } catch (error) {
-          console.log(error);
-          socket.emit("error", { message: "failed to send message" });
+          io.to(`user:${otherUserId}`).emit("conversation_update", {
+            conversationId,
+            lastMessage: conversation.lastMessage,
+            unreadCount: conversation.unreadCount.get(otherUserId),
+          });
         }
+
+        console.log(`Message sent in conversation`);
+      } catch (error) {
+        console.log(error);
+        socket.emit("error", { message: "failed to send message" });
       }
-    );
+    });
 
     //typing indicator//
     socket.on(
