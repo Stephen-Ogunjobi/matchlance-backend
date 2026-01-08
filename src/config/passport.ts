@@ -2,6 +2,7 @@ import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import dotenv from "dotenv";
 import User from "../models/users.js";
+import { invalidateUserCached } from "../utils/userCache.js";
 
 dotenv.config();
 
@@ -52,11 +53,13 @@ passport.use(
           if (!user.googleId) {
             user.googleId = profile.id;
             await user.save();
+            // Invalidate cache since googleId changed
+            await invalidateUserCached(user._id.toString());
           }
         }
         return done(null, user);
       } catch (err) {
-        return done(err, false);
+        return done(err as Error, false);
       }
     }
   )
@@ -73,6 +76,6 @@ passport.deserializeUser(async (id: any, done) => {
     const user = await User.findById(id);
     done(null, user);
   } catch (err) {
-    done(err, null);
+    done(err as Error, null);
   }
 });

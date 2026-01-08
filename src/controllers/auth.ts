@@ -14,6 +14,7 @@ import {
   sendPasswordResetEmail,
   sendVerificationEmail,
 } from "../utils/emailServices.js";
+import { getCachedUser, invalidateUserCached } from "../utils/userCache.js";
 
 dotenv.config();
 
@@ -104,6 +105,9 @@ const verifyEmail = async (req: Request, res: Response): Promise<Response> => {
     //store refreshToken in DB
     user.refreshToken = refreshToken;
     await user.save();
+
+    // Invalidate cache since isEmailVerified changed
+    await invalidateUserCached(user._id.toString());
 
     res.cookie("accessToken", accessToken, {
       httpOnly: true,
@@ -386,6 +390,9 @@ const postNewPassword = async (
     user.resetPasswordExpires = null;
     await user.save();
 
+    // Invalidate cache after password change
+    await invalidateUserCached(user._id.toString());
+
     return res.status(200).json({ message: "Password successfully change" });
   } catch (err) {
     console.log("New password error", err);
@@ -407,7 +414,8 @@ const getCurrentUser = async (
     if (!userId) {
       return res.status(404).json({ message: "User not found" });
     }
-    const user = await User.findById(userId);
+
+    const user = await getCachedUser(userId);
 
     if (!user) {
       return res.status(404).json({ message: "User not found" });
