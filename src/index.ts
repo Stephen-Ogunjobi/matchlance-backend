@@ -2,7 +2,6 @@ import express from "express";
 import dotenv from "dotenv";
 import session from "express-session";
 import { RedisStore } from "connect-redis";
-import { Redis } from "ioredis";
 import cookieParser from "cookie-parser";
 import { createServer } from "http";
 import connectDb from "./utils/db.js";
@@ -15,23 +14,12 @@ import passport from "passport";
 import cors from "cors";
 import "./config/passport.js";
 import { initializeSocket } from "./utils/socket.js";
+import { redisClient } from "./config/redis.js";
 
 dotenv.config();
 
 const app = express();
 const server = createServer(app);
-
-//initialize redis cli
-const redisClient = new Redis({
-  host: process.env.REDIS_HOST || "localhost",
-  port: parseInt(process.env.REDIS_PORT || "6379"),
-});
-
-redisClient.on("error", (err: Error) =>
-  console.log("redis client error:", err)
-);
-
-redisClient.on("connect", () => console.log("connected to redis"));
 
 //redis store initialized
 const redisStore = new RedisStore({

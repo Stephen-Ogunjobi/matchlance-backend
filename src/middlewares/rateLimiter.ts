@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
-import { RateLimiterMemory } from "rate-limiter-flexible";
+import { RateLimiterRedis } from "rate-limiter-flexible";
+import { redisClient } from "../config/redis.js";
 
 // get client identifier
 const getClientKey = (req: Request): string => {
@@ -17,83 +18,113 @@ const getClientKey = (req: Request): string => {
 };
 
 //auth rate limiters
-const loginLimiter = new RateLimiterMemory({
+const loginLimiter = new RateLimiterRedis({
+  storeClient: redisClient,
+  keyPrefix: "rl:login",
   points: 5,
   duration: 15 * 60,
   blockDuration: 15 * 60,
 });
 
-const signupLimiter = new RateLimiterMemory({
+const signupLimiter = new RateLimiterRedis({
+  storeClient: redisClient,
+  keyPrefix: "rl:signup",
   points: 3,
   duration: 60 * 60,
 });
 
-const passwordResetLimiter = new RateLimiterMemory({
+const passwordResetLimiter = new RateLimiterRedis({
+  storeClient: redisClient,
+  keyPrefix: "rl:password-reset",
   points: 3,
   duration: 60 * 60,
 });
 
-const resendVerificationLimiter = new RateLimiterMemory({
+const resendVerificationLimiter = new RateLimiterRedis({
+  storeClient: redisClient,
+  keyPrefix: "rl:resend-verification",
   points: 3,
   duration: 60 * 60,
 });
 
-const newPasswordLimiter = new RateLimiterMemory({
+const newPasswordLimiter = new RateLimiterRedis({
+  storeClient: redisClient,
+  keyPrefix: "rl:new-password",
   points: 5,
   duration: 15 * 60,
 });
 
 //job rate limiters
-const postJobLimiter = new RateLimiterMemory({
+const postJobLimiter = new RateLimiterRedis({
+  storeClient: redisClient,
+  keyPrefix: "rl:post-job",
   points: 10,
   duration: 60 * 60,
 });
 
-const getJobsLimiter = new RateLimiterMemory({
+const getJobsLimiter = new RateLimiterRedis({
+  storeClient: redisClient,
+  keyPrefix: "rl:get-jobs",
   points: 60,
   duration: 60,
 });
 
 // proposal rate limiters
-const submitProposalLimiter = new RateLimiterMemory({
+const submitProposalLimiter = new RateLimiterRedis({
+  storeClient: redisClient,
+  keyPrefix: "rl:submit-proposal",
   points: 5,
   duration: 60 * 60,
 });
 
 // chat rate limiters
-const sendMessageHttpLimiter = new RateLimiterMemory({
+const sendMessageHttpLimiter = new RateLimiterRedis({
+  storeClient: redisClient,
+  keyPrefix: "rl:send-message-http",
   points: 30,
   duration: 60, // 1 minute
 });
 
 //socket rate limiters
-const socketSendMessageLimiter = new RateLimiterMemory({
+const socketSendMessageLimiter = new RateLimiterRedis({
+  storeClient: redisClient,
+  keyPrefix: "rl:socket-send-message",
   points: 15,
   duration: 10,
 });
 
-const socketTypingLimiter = new RateLimiterMemory({
+const socketTypingLimiter = new RateLimiterRedis({
+  storeClient: redisClient,
+  keyPrefix: "rl:socket-typing",
   points: 5,
   duration: 5,
 });
 
-const socketMarkAsReadLimiter = new RateLimiterMemory({
+const socketMarkAsReadLimiter = new RateLimiterRedis({
+  storeClient: redisClient,
+  keyPrefix: "rl:socket-mark-read",
   points: 10,
   duration: 10,
 });
 
-const socketJoinConversationLimiter = new RateLimiterMemory({
+const socketJoinConversationLimiter = new RateLimiterRedis({
+  storeClient: redisClient,
+  keyPrefix: "rl:socket-join-conversation",
   points: 5,
   duration: 10,
 });
 
 // freelancer rate limiters
-const uploadPictureLimiter = new RateLimiterMemory({
+const uploadPictureLimiter = new RateLimiterRedis({
+  storeClient: redisClient,
+  keyPrefix: "rl:upload-picture",
   points: 5,
   duration: 60 * 60, // 1 hour
 });
 
-const matchedJobsLimiter = new RateLimiterMemory({
+const matchedJobsLimiter = new RateLimiterRedis({
+  storeClient: redisClient,
+  keyPrefix: "rl:matched-jobs",
   points: 30,
   duration: 60,
 });
@@ -113,7 +144,7 @@ type RateLimiterType =
   | "uploadPicture"
   | "matchedJobs";
 
-const limiters: Record<RateLimiterType, RateLimiterMemory> = {
+const limiters: Record<RateLimiterType, RateLimiterRedis> = {
   login: loginLimiter,
   signup: signupLimiter,
   passwordReset: passwordResetLimiter,
