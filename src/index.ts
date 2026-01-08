@@ -1,6 +1,8 @@
 import express from "express";
 import dotenv from "dotenv";
 import session from "express-session";
+import { RedisStore } from "connect-redis";
+import { Redis } from "ioredis";
 import cookieParser from "cookie-parser";
 import { createServer } from "http";
 import connectDb from "./utils/db.js";
@@ -19,6 +21,24 @@ dotenv.config();
 const app = express();
 const server = createServer(app);
 
+//initialize redis cli
+const redisClient = new Redis({
+  host: process.env.REDIS_HOST || "localhost",
+  port: parseInt(process.env.REDIS_PORT || "6379"),
+});
+
+redisClient.on("error", (err: Error) =>
+  console.log("redis client error:", err)
+);
+
+redisClient.on("connect", () => console.log("connected to redis"));
+
+//redis store initialized
+const redisStore = new RedisStore({
+  client: redisClient,
+  prefix: "matchlance:sess:",
+});
+
 app.use(
   cors({
     origin: "http://localhost:5173",
@@ -34,13 +54,19 @@ app.use(cookieParser());
 // Makes files accessible via: http://localhost:3001/uploads/...
 app.use("/uploads", express.static("uploads"));
 
-//session middleware configuration
+//session middleware with redis
 app.use(
   session({
+    store: redisStore,
     secret: process.env.SESSION_SECRET || "secret",
     resave: false,
     saveUninitialized: false,
-    cookie: { secure: false, httpOnly: true },
+    cookie: {
+      secure: process.env.NODE_ENV === "production",
+      httpOnly: true,
+      maxAge: 1000 * 60 * 60 * 24,
+      sameSite: "lax",
+    },
   })
 );
 
