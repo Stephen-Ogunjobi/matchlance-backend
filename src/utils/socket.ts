@@ -12,6 +12,8 @@ import {
   socketMarkAsReadLimiter,
   socketJoinConversationLimiter,
 } from "../middlewares/rateLimiter.js";
+import { pubClient, redisClient, subClient } from "../config/redis.js";
+import { createAdapter } from "@socket.io/redis-adapter";
 
 // Zod schema for send_message validation
 const sendMessageSchema = z.object({
@@ -57,8 +59,29 @@ interface AunthenticatedSocket extends Socket {
   userId?: string;
 }
 
-//store online users with key&value: userId&SocketId
-const onlineUsers = new Map<string, string>();
+//redis key for online users
+const ONLINE_USERS_KEY = "online_users";
+
+//redis online users tracking
+const addOnlineUser = async (userId: string, socketId: string) => {
+  const serverId = process.env.SERVER_ID || "server-1";
+  await redisClient.hset(ONLINE_USERS_KEY, userId, socketId);
+};
+
+const removeOnlineUser = async (userId: string) => {
+  await redisClient.hdel(ONLINE_USERS_KEY, userId);
+};
+
+const getOnlineUserSocketId = async (
+  userId: string
+): Promise<string | null> => {
+  return await redisClient.hget(ONLINE_USERS_KEY, userId);
+};
+
+const getAllOnlineUsers = async (): Promise<string[]> => {
+  const users = await redisClient.hkeys(ONLINE_USERS_KEY);
+  return users;
+};
 
 //creates a socket.io server and attached it to http server
 export const initializeSocket = (server: HttpServer) => {
@@ -69,6 +92,9 @@ export const initializeSocket = (server: HttpServer) => {
       methods: ["GET", "POST"],
     },
   });
+
+  //attach redis adapter for cross server communication
+  io.adapter(createAdapter(pubClient, subClient));
 
   //authentication middleware
   io.use((socket: AunthenticatedSocket, next: (err?: Error) => void) => {
@@ -119,12 +145,12 @@ export const initializeSocket = (server: HttpServer) => {
   });
 
   //connection event//
-  io.on("connection", (socket: AunthenticatedSocket) => {
+  io.on("connection", async (socket: AunthenticatedSocket) => {
     const userId = socket.userId!;
     console.log(`user connected: ${userId} (socket: ${socket.id})`);
 
     //add user to online users map
-    onlineUsers.set(userId, socket.id);
+    await addOnlineUser(userId, socket.id);
 
     //join user to their personal room
     socket.join(`user:${userId}`);
@@ -279,7 +305,7 @@ export const initializeSocket = (server: HttpServer) => {
 
         //check if recipient is online and in convo room
         if (otherUserId) {
-          const recipientSocketId = onlineUsers.get(otherUserId);
+          const recipientSocketId = await getOnlineUserSocketId(otherUserId);
           const isInConversationRoom =
             recipientSocketId &&
             io.sockets.adapter.rooms.get(`conversation:${conversationId}`);
@@ -424,10 +450,10 @@ export const initializeSocket = (server: HttpServer) => {
     );
 
     //disconnect//
-    socket.on("disconnect", () => {
+    socket.on("disconnect", async () => {
       console.log("user disconnected");
 
-      onlineUsers.delete(userId);
+      await removeOnlineUser(userId);
 
       io.emit("user_offline", { userId });
     });
@@ -442,6 +468,6 @@ export const initializeSocket = (server: HttpServer) => {
   return io;
 };
 
-export const getOnlineUsers = () => {
-  return Array.from(onlineUsers.keys());
+export const getOnlineUsers = async () => {
+  return await getAllOnlineUsers();
 };
