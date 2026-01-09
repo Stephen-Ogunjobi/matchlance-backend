@@ -1,6 +1,11 @@
 import type { Request, Response } from "express";
 import { Conversation, Message } from "../models/chat.js";
 import mongoose from "mongoose";
+import {
+  getCachedConversation,
+  invalidateConversationCache,
+  invalidateUserConversationsCache,
+} from "../utils/conversationCache.js";
 
 export const getConversationByProposal = async (
   req: Request,
@@ -17,19 +22,30 @@ export const getConversationByProposal = async (
       });
     }
 
-    // Find conversation for this proposal where user is a participant
-    const conversation = await Conversation.findOne({
+    // Step 1: Find conversation ID (lightweight query)
+    const conversationDoc = await Conversation.findOne({
       proposalId: new mongoose.Types.ObjectId(proposalId),
       participants: new mongoose.Types.ObjectId(userId),
     })
-      .populate("participants", "firstName lastName email")
-      .populate("jobId", "title")
-      .populate("proposalId");
+      .select("_id")
+      .lean();
+
+    if (!conversationDoc) {
+      return res.status(404).json({
+        success: false,
+        message: "No chat room found for this proposal",
+      });
+    }
+
+    // Step 2: Get full conversation from cache
+    const conversation = await getCachedConversation(
+      conversationDoc._id.toString()
+    );
 
     if (!conversation) {
       return res.status(404).json({
         success: false,
-        message: "No chat room found for this proposal",
+        message: "Conversation not found",
       });
     }
 
@@ -58,15 +74,25 @@ export const getChats = async (req: Request, res: Response) => {
       });
     }
 
-    const conversation = await Conversation.findOne({
-      _id: new mongoose.Types.ObjectId(conversationId),
-      participants: new mongoose.Types.ObjectId(userId),
-    });
+    // Get conversation from cache
+    const conversation = await getCachedConversation(conversationId);
 
     if (!conversation) {
       return res.status(404).json({
         success: false,
         message: "Conversation not found or access denied",
+      });
+    }
+
+    // Verify user is a participant
+    const isParticipant = conversation.participants.some(
+      (p) => p.toString() === userId
+    );
+
+    if (!isParticipant) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied",
       });
     }
 
@@ -97,9 +123,18 @@ export const getChats = async (req: Request, res: Response) => {
       }
     );
 
-    //reset unread count
-    conversation.unreadCount.set(userId.toString(), 0);
-    await conversation.save();
+    // Get the actual conversation document to update unread count
+    const conversationDoc = await Conversation.findById(conversationId);
+
+    if (conversationDoc) {
+      //reset unread count
+      conversationDoc.unreadCount.set(userId.toString(), 0);
+      await conversationDoc.save();
+
+      // Invalidate caches
+      await invalidateConversationCache(conversationId);
+      await invalidateUserConversationsCache(userId);
+    }
 
     res.status(200).json({
       success: true,
@@ -173,6 +208,13 @@ export const sendMessage = async (req: Request, res: Response) => {
     }
 
     await conversation.save();
+
+    // Invalidate caches
+    await invalidateConversationCache(conversationId);
+    await invalidateUserConversationsCache(userId);
+    if (otherUserId) {
+      await invalidateUserConversationsCache(otherUserId);
+    }
 
     res.status(201).json({
       success: true,

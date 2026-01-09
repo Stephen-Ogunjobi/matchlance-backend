@@ -14,6 +14,10 @@ import {
 } from "../middlewares/rateLimiter.js";
 import { pubClient, redisClient, subClient } from "../config/redis.js";
 import { createAdapter } from "@socket.io/redis-adapter";
+import {
+  invalidateConversationCache,
+  invalidateUserConversationsCache,
+} from "./conversationCache.js";
 
 // Zod schema for send_message validation
 const sendMessageSchema = z.object({
@@ -208,6 +212,9 @@ export const initializeSocket = (server: HttpServer) => {
               conversationId,
               count: undeliveredMessages.modifiedCount,
             });
+
+            // Invalidate conversation cache after message status update
+            await invalidateConversationCache(conversationId);
           }
         }
       } catch (error: any) {
@@ -296,6 +303,10 @@ export const initializeSocket = (server: HttpServer) => {
         }
 
         await conversation.save();
+        await invalidateConversationCache(conversationId);
+        conversation.participants.forEach(async (participantId) => {
+          await invalidateUserConversationsCache(participantId.toString());
+        });
 
         //real-time emit message
         io.to(`conversation:${conversationId}`).emit("new_message", {
@@ -417,6 +428,11 @@ export const initializeSocket = (server: HttpServer) => {
           // Reset unread count
           conversation.unreadCount.set(userId.toString(), 0);
           await conversation.save();
+
+          await invalidateConversationCache(conversationId);
+          conversation.participants.forEach(async (participantId) => {
+            await invalidateUserConversationsCache(participantId.toString());
+          });
 
           // Notify other user that their messages were read
           const otherUserId = conversation.participants
