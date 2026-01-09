@@ -4,6 +4,12 @@ import User from "../models/users.js";
 import { Proposal } from "../models/proposal.js";
 import { sendProposalAcceptanceEmail } from "../utils/emailServices.js";
 import mongoose from "mongoose";
+import {
+  getCachedJob,
+  getCachedJobsByClient,
+  invalidateJobCache,
+  invalidateClientJobsCache,
+} from "../utils/jobCache.js";
 
 export const postNewJob = async (
   req: Request,
@@ -46,6 +52,10 @@ export const postNewJob = async (
       status: "open",
     });
 
+    // Invalidate client's job list cache
+    await invalidateClientJobsCache(userId);
+    // Note: Matched jobs cache will refresh via TTL when freelancers query
+
     return res.status(201).json({ message: "New job created" });
   } catch (err) {
     console.error("Error creating job:", err);
@@ -66,14 +76,14 @@ export const getJobs = async (
       return res.status(401).json({ error: "Unauthorized" });
     }
 
-    const userJobs = await Job.find({ clientId: userId });
-    if (!userJobs) {
+    const userJobs = await getCachedJobsByClient(userId);
+    if (!userJobs || userJobs.length === 0) {
       return res.status(404).json({ error: "No job found" });
     }
 
     return res.status(200).json({ userJobs });
   } catch (err) {
-    console.error("Error creating job:", err);
+    console.error("Error fetching jobs:", err);
     return res.status(500).json({
       error: "Error fetching Job",
       details: err instanceof Error ? err.message : String(err),
@@ -91,9 +101,9 @@ export const getJob = async (
       return res.status(401).json({ error: "Invalid Request" });
     }
 
-    const job = await Job.findById(jobId);
+    const job = await getCachedJob(jobId);
     if (!job) {
-      return res.status(404).json({ error: "Job notfound" });
+      return res.status(404).json({ error: "Job not found" });
     }
 
     return res.status(200).json({ job });
@@ -163,6 +173,11 @@ export const updateJob = async (
       runValidators: true,
     });
 
+    // Invalidate both caches
+    await invalidateJobCache(jobId);
+    await invalidateClientJobsCache(userId);
+    // Note: Matched jobs cache will refresh via TTL when freelancers query
+
     return res
       .status(200)
       .json({ message: "Job updated successfully", job: updatedJob });
@@ -198,6 +213,11 @@ export const deleteJob = async (
     }
 
     await Job.findByIdAndDelete(jobId);
+
+    // Invalidate both caches
+    await invalidateJobCache(jobId);
+    await invalidateClientJobsCache(userId);
+    // Note: Matched jobs cache will refresh via TTL when freelancers query
 
     return res.status(200).json({ message: "Job deleted successfully" });
   } catch (err) {

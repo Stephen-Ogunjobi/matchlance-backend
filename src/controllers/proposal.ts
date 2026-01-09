@@ -4,6 +4,7 @@ import { Job } from "../models/job.js";
 import { Proposal } from "../models/proposal.js";
 import User from "../models/users.js";
 import { sendProposalNotificationEmail } from "../utils/emailServices.js";
+import { invalidateMatchedJobsCache } from "../utils/jobCache.js";
 
 export const postProposal = async (
   req: Request,
@@ -70,6 +71,9 @@ export const postProposal = async (
       { $push: { proposals: proposal._id } },
       { new: true }
     );
+
+    // Invalidate matched jobs cache for this freelancer
+    await invalidateMatchedJobsCache(freelancerId);
 
     const client = await User.findOne({ _id: job.clientId });
     const freelancer = await User.findOne({ _id: freelancerId });

@@ -5,6 +5,11 @@ import { Job } from "../models/job.js";
 import User from "../models/users.js";
 import { Proposal } from "../models/proposal.js";
 import mongoose from "mongoose";
+import {
+  getCachedMatchedJobs,
+  setMatchedJobsCache,
+  invalidateMatchedJobsCache,
+} from "../utils/jobCache.js";
 
 export const postFreelancerProfile = async (
   req: Request,
@@ -141,6 +146,12 @@ export const updateFreelancerProfile = async (
         runValidators: true,
       }
     );
+
+    // If skills, categories, or other matching-related fields were updated, invalidate matched jobs cache
+    if (updates.skills || updates.categories || updates.experienceLevel) {
+      await invalidateMatchedJobsCache(freelancerId);
+    }
+
     return res.status(200).json({
       message: "Profile updated successfully",
       profile: updateProfile,
@@ -242,6 +253,12 @@ export const getFreelancerMatchJobs = async (
       return res.status(403).json({ error: "Forbidden" });
     }
 
+    // Try to get from cache first
+    const cachedJobs = await getCachedMatchedJobs(freelancerId);
+    if (cachedJobs) {
+      return res.status(200).json({ jobs: cachedJobs });
+    }
+
     const existingProposals = await Proposal.find({ freelancerId })
       .select("jobId")
       .lean();
@@ -290,6 +307,9 @@ export const getFreelancerMatchJobs = async (
       },
       { $sort: { score: -1 } },
     ]);
+
+    // Cache the results
+    await setMatchedJobsCache(freelancerId, matchJobs as any);
 
     return res.status(200).json({ jobs: matchJobs });
   } catch (err) {
