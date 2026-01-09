@@ -10,6 +10,12 @@ import {
   setMatchedJobsCache,
   invalidateMatchedJobsCache,
 } from "../utils/jobCache.js";
+import {
+  getCachedFreelancerProfile,
+  invalidateFreelancerCache,
+  updateFreelancerCache,
+  setFreelancerCache,
+} from "../utils/freelancerCache.js";
 
 export const postFreelancerProfile = async (
   req: Request,
@@ -40,7 +46,7 @@ export const postFreelancerProfile = async (
       return res.status(401).json({ error: "Unauthorized" });
     }
 
-    await FreelancerProfile.create({
+    const newProfile = await FreelancerProfile.create({
       freelancerId,
       bio,
       title,
@@ -52,6 +58,10 @@ export const postFreelancerProfile = async (
       location,
       languages,
     });
+
+    // Cache the newly created profile
+    await setFreelancerCache(newProfile.toObject() as any);
+
     return res.status(201).json({ message: "Profile created" });
   } catch (err) {
     console.error("Error creating profile", err);
@@ -78,10 +88,19 @@ export const getFreelancerProfile = async (
       return res.status(400).json({ error: "Unauthorized" });
     }
 
+    // Try to get from cache first
+    const cachedProfile = await getCachedFreelancerProfile(freelancerId);
+    if (cachedProfile) {
+      return res.status(200).json({ freelancerProfile: cachedProfile });
+    }
+
     const profile = await FreelancerProfile.findOne({ freelancerId });
     if (!profile) {
       return res.status(404).json({ error: "Profile not found" });
     }
+
+    // Cache the profile for future requests
+    await setFreelancerCache(profile.toObject() as any);
 
     return res.status(200).json({ freelancerProfile: profile });
   } catch (err) {
@@ -146,6 +165,11 @@ export const updateFreelancerProfile = async (
         runValidators: true,
       }
     );
+
+    // Update the cache with the new profile data
+    if (updateProfile) {
+      await setFreelancerCache(updateProfile.toObject() as any);
+    }
 
     // If skills, categories, or other matching-related fields were updated, invalidate matched jobs cache
     if (updates.skills || updates.categories || updates.experienceLevel) {
@@ -212,6 +236,11 @@ export const uploadProfilePicture = async (
       }
     );
 
+    // Update the cache with the new profile picture
+    if (updatedProfile) {
+      await setFreelancerCache(updatedProfile.toObject() as any);
+    }
+
     return res.status(200).json({
       message: "Profile picture uploaded successfully",
       profilePicture: profilePictureUrl,
@@ -265,7 +294,21 @@ export const getFreelancerMatchJobs = async (
 
     const appliedJobIds = existingProposals.map((p) => p.jobId.toString());
 
-    const freelancerProfile = await FreelancerProfile.findOne({ freelancerId });
+    // Try to get from cache first
+    let freelancerProfile = await getCachedFreelancerProfile(freelancerId);
+
+    if (!freelancerProfile) {
+      const profile = await FreelancerProfile.findOne({ freelancerId });
+      if (!profile) {
+        return res.status(404).json({ error: "Profile could not be found" });
+      }
+      const profileData = profile.toObject() as any;
+      freelancerProfile = profileData;
+      // Cache the profile for future requests
+      await setFreelancerCache(profileData);
+    }
+
+    // TypeScript guard: ensure freelancerProfile is not null
     if (!freelancerProfile) {
       return res.status(404).json({ error: "Profile could not be found" });
     }
