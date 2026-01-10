@@ -23,7 +23,7 @@ const server = createServer(app);
 
 //redis store initialized
 const redisStore = new RedisStore({
-  client: redisClient,
+  client: redisClient as any,
   prefix: "matchlance:sess:",
 });
 

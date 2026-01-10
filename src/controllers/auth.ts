@@ -142,7 +142,6 @@ const initiateGoogleAuth = (
   res: Response,
   next: NextFunction
 ): void => {
-  // Extract role from query parameter, default to "freelancer" if not provided
   const role = req.query.role || "freelancer";
 
   // Encode role in state parameter to persist through OAuth flow using base64
@@ -150,8 +149,8 @@ const initiateGoogleAuth = (
 
   // Initiate passport Google authentication with role encoded in state
   passport.authenticate("google", {
-    scope: ["profile", "email"], // Request user's profile and email from Google
-    state: state, // Pass encoded role through OAuth flow
+    scope: ["profile", "email"],
+    state: state,
   })(req, res, next);
 };
 
@@ -160,7 +159,7 @@ const handleGoogleCallback = async (
   res: Response
 ): Promise<Response | void> => {
   try {
-    const user = req.user as any; // Passport sets this to the full User document
+    const user = req.user as any;
     if (!user) {
       return res.status(500).json({ message: "Something went wrong" });
     }

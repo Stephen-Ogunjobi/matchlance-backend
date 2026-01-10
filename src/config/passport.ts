@@ -67,7 +67,7 @@ passport.use(
 
 // store only user ID in session
 passport.serializeUser((user: any, done) => {
-  done(null, user._id);
+  done(null, user._id.toString());
 });
 
 // retrieve user from db
