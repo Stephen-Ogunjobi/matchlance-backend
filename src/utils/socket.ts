@@ -59,7 +59,7 @@ const parseCookies = (cookieString: string): Record<string, string> => {
 };
 
 //add userId to each socket connection
-interface AunthenticatedSocket extends Socket {
+interface AuthenticatedSocket extends Socket {
   userId?: string;
 }
 
@@ -101,7 +101,7 @@ export const initializeSocket = (server: HttpServer) => {
   io.adapter(createAdapter(pubClient, subClient));
 
   //authentication middleware
-  io.use((socket: AunthenticatedSocket, next: (err?: Error) => void) => {
+  io.use((socket: AuthenticatedSocket, next: (err?: Error) => void) => {
     try {
       // Get token from multiple sources (in order of priority):
       // 1. handshake.auth.token (client explicitly sends it)
@@ -149,7 +149,7 @@ export const initializeSocket = (server: HttpServer) => {
   });
 
   //connection event//
-  io.on("connection", async (socket: AunthenticatedSocket) => {
+  io.on("connection", async (socket: AuthenticatedSocket) => {
     const userId = socket.userId!;
     console.log(`user connected: ${userId} (socket: ${socket.id})`);
 
@@ -304,9 +304,11 @@ export const initializeSocket = (server: HttpServer) => {
 
         await conversation.save();
         await invalidateConversationCache(conversationId);
-        conversation.participants.forEach(async (participantId) => {
-          await invalidateUserConversationsCache(participantId.toString());
-        });
+        await Promise.all(
+          conversation.participants.map((participantId) =>
+            invalidateUserConversationsCache(participantId.toString())
+          )
+        );
 
         //real-time emit message
         io.to(`conversation:${conversationId}`).emit("new_message", {
@@ -430,9 +432,11 @@ export const initializeSocket = (server: HttpServer) => {
           await conversation.save();
 
           await invalidateConversationCache(conversationId);
-          conversation.participants.forEach(async (participantId) => {
-            await invalidateUserConversationsCache(participantId.toString());
-          });
+          await Promise.all(
+            conversation.participants.map((participantId) =>
+              invalidateUserConversationsCache(participantId.toString())
+            )
+          );
 
           // Notify other user that their messages were read
           const otherUserId = conversation.participants
