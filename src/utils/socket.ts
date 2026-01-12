@@ -103,13 +103,8 @@ export const initializeSocket = (server: HttpServer) => {
   //authentication middleware
   io.use((socket: AuthenticatedSocket, next: (err?: Error) => void) => {
     try {
-      // Get token from multiple sources (in order of priority):
-      // 1. handshake.auth.token (client explicitly sends it)
-      // 2. handshake.query.token (token in query string)
-      // 3. cookies (cookie-based authentication)
       let token = socket.handshake.auth.token || socket.handshake.query.token;
 
-      // If no token found in auth or query, check cookies
       if (!token) {
         const cookieHeader = socket.handshake.headers.cookie;
         if (cookieHeader) {

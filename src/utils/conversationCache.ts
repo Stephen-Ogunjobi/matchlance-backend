@@ -42,10 +42,16 @@ export const getCachedConversation = async (
       return null;
     }
 
-    // Convert Map to object for caching
+    // Convert Map to object for caching (if it's a Map)
+    const unreadCount = conversation.unreadCount
+      ? conversation.unreadCount instanceof Map
+        ? Object.fromEntries(conversation.unreadCount)
+        : conversation.unreadCount
+      : {};
+
     const cacheData = {
       ...conversation,
-      unreadCount: Object.fromEntries(conversation.unreadCount || new Map()),
+      unreadCount,
     };
 
     // Store in cache
@@ -81,11 +87,19 @@ export const getCachedUserConversations = async (
       .populate("participants", "firstName lastName email")
       .lean();
 
-    // Convert Map to object for caching
-    const cacheData = conversations.map((conv) => ({
-      ...conv,
-      unreadCount: Object.fromEntries(conv.unreadCount || new Map()),
-    }));
+    // Convert Map to object for caching (if it's a Map)
+    const cacheData = conversations.map((conv) => {
+      const unreadCount = conv.unreadCount
+        ? conv.unreadCount instanceof Map
+          ? Object.fromEntries(conv.unreadCount)
+          : conv.unreadCount
+        : {};
+
+      return {
+        ...conv,
+        unreadCount,
+      };
+    });
 
     if (cacheData.length > 0) {
       await redisClient.setex(
@@ -101,10 +115,18 @@ export const getCachedUserConversations = async (
     const conversations = await Conversation.find({
       participants: new Types.ObjectId(userId),
     }).lean();
-    const cacheData = conversations.map((conv) => ({
-      ...conv,
-      unreadCount: Object.fromEntries(conv.unreadCount || new Map()),
-    }));
+    const cacheData = conversations.map((conv) => {
+      const unreadCount = conv.unreadCount
+        ? conv.unreadCount instanceof Map
+          ? Object.fromEntries(conv.unreadCount)
+          : conv.unreadCount
+        : {};
+
+      return {
+        ...conv,
+        unreadCount,
+      };
+    });
     return cacheData as CachedConversation[];
   }
 };

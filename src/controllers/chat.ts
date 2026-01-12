@@ -85,9 +85,10 @@ export const getChats = async (req: Request, res: Response) => {
     }
 
     // Verify user is a participant
-    const isParticipant = conversation.participants.some(
-      (p) => p.toString() === userId
-    );
+    const isParticipant = conversation.participants.some((p) => {
+      const participantId = typeof p === "object" && p !== null ? (p as any)._id : p;
+      return participantId.toString() === userId;
+    });
 
     if (!isParticipant) {
       return res.status(403).json({
