@@ -84,9 +84,9 @@ export const getFreelancerProfile = async (
       return res.status(400).json({ error: "Invalid request" });
     }
 
-    if (userId.toString() !== freelancerId.toString()) {
-      return res.status(400).json({ error: "Unauthorized" });
-    }
+    // if (userId.toString() !== freelancerId.toString()) {
+    //   return res.status(400).json({ error: "Unauthorized" });
+    // }
 
     // Try to get from cache first
     const cachedProfile = await getCachedFreelancerProfile(freelancerId);
