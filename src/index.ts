@@ -10,6 +10,7 @@ import jobRoutes from "./routes/job.js";
 import freenlancerRoute from "./routes/freelancer.js";
 import proposalRoutes from "./routes/proposal.js";
 import chatRoutes from "./routes/chat.js";
+import contractRoutes from "./routes/contract.js";
 import passport from "passport";
 import cors from "cors";
 import "./config/passport.js";
@@ -67,11 +68,12 @@ app.use("/api/job", jobRoutes);
 app.use("/api/freelancer", freenlancerRoute);
 app.use("/api/proposal", proposalRoutes);
 app.use("/api/chat", chatRoutes);
+app.use("/api/contract", contractRoutes);
 
 const PORT = process.env.PORT || 3001;
 
 //initialize socket before starting server
-const io = await initializeSocket(server);
+const io = initializeSocket(server);
 
 connectDb().then(() => {
   server.listen(PORT, () => {
