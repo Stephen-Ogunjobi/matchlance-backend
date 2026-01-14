@@ -1,8 +1,9 @@
 import type { Request, Response } from "express";
 import { getCachedConversation } from "../utils/conversationCache.js";
 import { getCachedJob, invalidateJobCache } from "../utils/jobCache.js";
+import { getCachedUser } from "../utils/userCache.js";
 import { Proposal } from "../models/proposal.js";
-import { Contract } from "../models/contract.js";
+import { Contract, type IContract } from "../models/contract.js";
 import { Job } from "../models/job.js";
 import {
   setContractCache,
@@ -10,6 +11,8 @@ import {
   invalidateFreelancerContractsCache,
   invalidateJobContractCache,
 } from "../utils/contractCache.js";
+import { sendFreelancerHiredEmail } from "../utils/emailServices.js";
+import mongoose from "mongoose";
 
 export const createContract = async (
   req: Request,
@@ -41,7 +44,6 @@ export const createContract = async (
       return res.status(403).json({ error: "Unauthorized" });
     }
 
-    // Get the proposalId from conversation
     const proposalId =
       typeof conversation.proposalId === "object" &&
       conversation.proposalId?._id
@@ -74,62 +76,123 @@ export const createContract = async (
         .json({ error: "Active contract already exists for this job" });
     }
 
-    // Get freelancerId from proposal
     const freelancerId = proposal.freelancerId;
 
-    // Calculate contract budget amount
     let budgetAmount: number;
     if (job.budget.type === "fixed") {
       budgetAmount = job.budget.amount || 0;
     } else {
-      // For hourly jobs, use average of proposal's min and max
-      budgetAmount = (proposal.proposedBudget.min + proposal.proposedBudget.max) / 2;
+      budgetAmount =
+        (proposal.proposedBudget.min + proposal.proposedBudget.max) / 2;
     }
 
-    // Create the contract
-    const contract = await Contract.create({
-      jobId: jobId,
-      clientId: job.clientId,
-      freelancerId: freelancerId,
-      proposalId: proposalId,
-      conversationId: conversationId,
-      projectDetails: {
-        title: job.title,
-        description: job.description,
-        category: job.category,
-        skills: job.skills,
-      },
-      budget: {
-        type: job.budget.type,
-        amount: budgetAmount,
-        currency: job.budget.currency,
-      },
-      duration: {
-        startDate: new Date(),
-        estimatedDuration: job.duration.estimatedHours || 0,
-      },
-      status: "active",
-      deliverables: [],
-      reviews: {},
-    });
+    //start session for transaction to track the transactions
+    const session = await mongoose.startSession();
 
-    // Update job status to in_progress
-    await Job.findByIdAndUpdate(jobId, { status: "in_progress" });
+    //start transaction
+    session.startTransaction();
 
-    // Invalidate job cache after update
+    // Declare contract variable outside try block so it's accessible after transaction
+    let contract: IContract[] | undefined;
+
+    try {
+      //create contract with session
+      contract = await Contract.create(
+        [
+          {
+            jobId: jobId,
+            clientId: job.clientId,
+            freelancerId: freelancerId,
+            proposalId: proposalId,
+            conversationId: conversationId,
+            projectDetails: {
+              title: job.title,
+              description: job.description,
+              category: job.category,
+              skills: job.skills,
+            },
+            budget: {
+              type: job.budget.type,
+              amount: budgetAmount,
+              currency: job.budget.currency,
+            },
+            duration: {
+              startDate: new Date(),
+              estimatedDuration: job.duration.estimatedHours || 0,
+            },
+            status: "active",
+            deliverables: [],
+            reviews: {},
+          },
+        ],
+        { session } //every db operation must include session to be part of the transaction
+      );
+
+      //reject other pending proposals with session
+      await Proposal.updateMany(
+        {
+          jobId: jobId,
+          _id: { $ne: proposalId },
+          status: "pending",
+        },
+        {
+          $set: { status: "rejected" },
+        },
+        { session }
+      );
+
+      await Job.findByIdAndUpdate(
+        jobId,
+        { status: "in_progress" },
+        { session }
+      );
+
+      //commit the transaction to make changes permanent
+      await session.commitTransaction();
+    } catch (transactionError) {
+      // If anything fails, rollback all changes
+      await session.abortTransaction();
+      throw transactionError;
+    } finally {
+      // Always end the session
+      session.endSession();
+    }
+
+    // Ensure contract was created successfully
+    if (!contract || contract.length === 0) {
+      throw new Error("Contract creation failed");
+    }
+
+    const createdContract = contract[0]!;
+
     await invalidateJobCache(jobId);
 
-    // Cache the created contract
-    await setContractCache(contract.toObject());
+    await setContractCache(createdContract.toObject());
 
-    // Invalidate related contract caches
     await invalidateClientContractsCache(job.clientId.toString());
     await invalidateFreelancerContractsCache(freelancerId.toString());
     await invalidateJobContractCache(jobId);
 
+    try {
+      const freelancer = await getCachedUser(freelancerId.toString());
+      const client = await getCachedUser(job.clientId.toString());
+
+      if (freelancer && client) {
+        await sendFreelancerHiredEmail(
+          freelancer.email,
+          freelancer.firstName,
+          client.firstName,
+          job.title,
+          createdContract.toObject()
+        );
+      }
+    } catch (emailError) {
+      console.error("Failed to send freelancer hired email:", emailError);
+    }
+
     return res.status(201).json({
       message: "Contract created successfully",
-      contract,
+      contract: createdContract,
     });
   } catch (error) {
     console.error("Error creating contract:", error);

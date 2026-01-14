@@ -480,3 +480,217 @@ export const sendProposalAcceptanceEmail = async (
     return { success: false, error };
   }
 };
+
+export const sendFreelancerHiredEmail = async (
+  email: string,
+  freelancerName: string,
+  clientName: string,
+  jobTitle: string,
+  contractDetails: any
+) => {
+  const contractUrl = `${
+    process.env.FRONTEND_CONTRACT_URL || process.env.FRONTEND_URL
+  }/contracts/${contractDetails._id}`;
+
+  // Extract contract details
+  const budget =
+    contractDetails.budget.type === "fixed"
+      ? `$${contractDetails.budget.amount} (Fixed Price)`
+      : `$${contractDetails.budget.amount}/hour`;
+  const startDate = new Date(contractDetails.duration.startDate).toLocaleDateString();
+
+  const msg = {
+    to: email,
+    from: {
+      email: FROM_EMAIL,
+      name: FROM_NAME,
+    },
+    subject: `🎉 You're Hired! ${clientName} wants to work with you`,
+    text: `Hi ${freelancerName},\n\nCongratulations! ${clientName} has chosen you for their project "${jobTitle}".\n\nProject: ${jobTitle}\nBudget: ${budget}\nStart Date: ${startDate}\n\nWhat's Next:\n1. Review the project details\n2. Connect with ${clientName} to discuss the work\n3. Start delivering amazing results!\n\nView your new project:\n${contractUrl}\n\nLet's make this project a success!\n\nBest regards,\nThe Matchlance Team`,
+    html: `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header {
+              background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%);
+              color: white;
+              padding: 40px 20px;
+              text-align: center;
+              border-radius: 5px 5px 0 0;
+            }
+            .content { background-color: #f9fafb; padding: 30px; border-radius: 0 0 5px 5px; }
+            .celebration { font-size: 60px; text-align: center; margin: 10px 0; }
+            .job-title {
+              color: #7c3aed;
+              font-size: 22px;
+              font-weight: bold;
+              margin: 20px 0;
+              text-align: center;
+              padding: 15px;
+              background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%);
+              border-radius: 5px;
+            }
+            .info-card {
+              background-color: white;
+              border-left: 4px solid #7c3aed;
+              padding: 25px;
+              margin: 25px 0;
+              border-radius: 5px;
+              box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            }
+            .detail-row {
+              margin: 15px 0;
+              padding: 12px 0;
+              border-bottom: 1px solid #e5e7eb;
+            }
+            .detail-row:last-child {
+              border-bottom: none;
+            }
+            .detail-label {
+              font-weight: bold;
+              color: #6b7280;
+              display: inline-block;
+              width: 120px;
+            }
+            .detail-value {
+              color: #111827;
+              font-weight: 500;
+            }
+            .next-steps {
+              background-color: #faf5ff;
+              border: 2px solid #7c3aed;
+              padding: 25px;
+              border-radius: 5px;
+              margin: 25px 0;
+            }
+            .next-steps h3 {
+              color: #5b21b6;
+              margin-top: 0;
+            }
+            .next-steps ol {
+              margin: 10px 0;
+              padding-left: 25px;
+            }
+            .next-steps li {
+              margin: 10px 0;
+              color: #6b21a8;
+              font-size: 15px;
+            }
+            .button {
+              display: inline-block;
+              padding: 18px 40px;
+              background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%);
+              color: white;
+              text-decoration: none;
+              border-radius: 5px;
+              margin: 25px 0;
+              font-weight: bold;
+              text-align: center;
+              font-size: 16px;
+              box-shadow: 0 4px 6px rgba(124, 58, 237, 0.3);
+            }
+            .button:hover {
+              background: linear-gradient(135deg, #5b21b6 0%, #4c1d95 100%);
+            }
+            .highlight-box {
+              background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%);
+              border: 2px solid #7c3aed;
+              padding: 20px;
+              border-radius: 5px;
+              margin: 20px 0;
+              text-align: center;
+            }
+            .highlight-box p {
+              margin: 5px 0;
+              color: #5b21b6;
+              font-weight: bold;
+              font-size: 18px;
+            }
+            .footer {
+              margin-top: 30px;
+              padding-top: 20px;
+              border-top: 2px solid #e5e7eb;
+              font-size: 12px;
+              color: #6b7280;
+              text-align: center;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <div class="celebration">🎉</div>
+              <h1 style="margin: 10px 0; font-size: 32px;">You're Hired!</h1>
+              <p style="margin: 10px 0; font-size: 18px;">${clientName} wants to work with you</p>
+            </div>
+            <div class="content">
+              <p style="font-size: 18px;">Hi ${freelancerName},</p>
+              <div class="highlight-box">
+                <p>🚀 Time to showcase your skills!</p>
+              </div>
+              <p style="font-size: 16px; color: #5b21b6; font-weight: 500;">
+                Great news! ${clientName} was impressed with your proposal and has chosen you for:
+              </p>
+              <div class="job-title">"${jobTitle}"</div>
+
+              <div class="info-card">
+                <h3 style="margin-top: 0; color: #111827; font-size: 20px;">Project Details</h3>
+                <div class="detail-row">
+                  <span class="detail-label">Client:</span>
+                  <span class="detail-value">${clientName}</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Budget:</span>
+                  <span class="detail-value">${budget}</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Start Date:</span>
+                  <span class="detail-value">${startDate}</span>
+                </div>
+              </div>
+
+              <div class="next-steps">
+                <h3>What's Next?</h3>
+                <ol>
+                  <li>Review the project details and requirements</li>
+                  <li>Connect with ${clientName} to discuss deliverables</li>
+                  <li>Start working and deliver exceptional results!</li>
+                </ol>
+              </div>
+
+              <p style="text-align: center;">
+                <a href="${contractUrl}" class="button">View Project & Get Started</a>
+              </p>
+
+              <p style="font-size: 14px; color: #6b7280; text-align: center; margin-top: 20px;">
+                This is your chance to build a great working relationship. Show ${clientName} what you're capable of!
+              </p>
+
+              <div class="footer">
+                <p><strong>Matchlance</strong> - Connecting Clients with Top Freelancers</p>
+                <p>Need help? We're here to support you.</p>
+              </div>
+            </div>
+          </div>
+        </body>
+      </html>
+    `,
+  };
+
+  try {
+    await sgMail.send(msg);
+    console.log(
+      `Freelancer hired email sent to ${email} for project "${jobTitle}"`
+    );
+    return { success: true };
+  } catch (error: any) {
+    console.error("SendGrid freelancer hired email error:", error);
+    if (error.response) {
+      console.error(error.response.body);
+    }
+    return { success: false, error };
+  }
+};
