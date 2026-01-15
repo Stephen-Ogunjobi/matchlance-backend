@@ -4,7 +4,7 @@ import { Server as SocketIOServer } from "socket.io";
 import jwt, { type JwtPayload } from "jsonwebtoken";
 import dotenv from "dotenv";
 import { Conversation, Message } from "../models/chat.js";
-import mongoose from "mongoose";
+import mongoose, { type ClientSession } from "mongoose";
 import { z } from "zod";
 import {
   socketSendMessageLimiter,
@@ -41,9 +41,72 @@ const sendMessageSchema = z.object({
   fileName: z.string().max(255, "File name too long").optional(),
 });
 
+// Zod schema for join_conversation validation
+const joinConversationSchema = z
+  .string({ message: "conversationId is required" })
+  .min(1, "conversationId cannot be empty")
+  .refine((val) => mongoose.Types.ObjectId.isValid(val), {
+    message: "Invalid conversationId format",
+  });
+
+// Zod schema for leave_conversation validation
+const leaveConversationSchema = z
+  .string({ message: "conversationId is required" })
+  .min(1, "conversationId cannot be empty")
+  .refine((val) => mongoose.Types.ObjectId.isValid(val), {
+    message: "Invalid conversationId format",
+  });
+
+// Zod schema for typing event validation
+const typingSchema = z.object({
+  conversationId: z
+    .string({ message: "conversationId is required" })
+    .min(1, "conversationId cannot be empty")
+    .refine((val) => mongoose.Types.ObjectId.isValid(val), {
+      message: "Invalid conversationId format",
+    }),
+  isTyping: z.boolean({ message: "isTyping must be a boolean" }),
+});
+
+// Zod schema for mark_as_read validation
+const markAsReadSchema = z.object({
+  conversationId: z
+    .string({ message: "conversationId is required" })
+    .min(1, "conversationId cannot be empty")
+    .refine((val) => mongoose.Types.ObjectId.isValid(val), {
+      message: "Invalid conversationId format",
+    }),
+  messageId: z
+    .string()
+    .refine((val) => mongoose.Types.ObjectId.isValid(val), {
+      message: "Invalid messageId format",
+    })
+    .optional(),
+});
+
 dotenv.config();
 
-// Helper function to parse cookies from cookie string
+// Type definitions for better type safety
+interface CustomJwtPayload extends JwtPayload {
+  id?: string;
+  userId?: string;
+}
+
+interface TypingEventData {
+  conversationId: string;
+  isTyping: boolean;
+}
+
+interface MarkAsReadEventData {
+  conversationId: string;
+  messageId?: string;
+}
+
+interface RateLimitError extends Error {
+  remainingPoints?: number;
+  msBeforeNext?: number;
+}
+
 const parseCookies = (cookieString: string): Record<string, string> => {
   const cookies: Record<string, string> = {};
   if (!cookieString) return cookies;
@@ -68,7 +131,6 @@ const ONLINE_USERS_KEY = "online_users";
 
 //redis online users tracking
 const addOnlineUser = async (userId: string, socketId: string) => {
-  const serverId = process.env.SERVER_ID || "server-1";
   await redisClient.hset(ONLINE_USERS_KEY, userId, socketId);
 };
 
@@ -85,6 +147,23 @@ const getOnlineUserSocketId = async (
 const getAllOnlineUsers = async (): Promise<string[]> => {
   const users = await redisClient.hkeys(ONLINE_USERS_KEY);
   return users;
+};
+
+//helper function for rate limit error handling
+const handleRateLimitError = (
+  socket: Socket,
+  error: unknown,
+  customMessage?: string
+): boolean => {
+  const rateLimitError = error as RateLimitError;
+  if (rateLimitError.remainingPoints !== undefined) {
+    socket.emit("error", {
+      message: customMessage || "Rate limit exceeded. Please slow down.",
+      retryAfter: Math.ceil((rateLimitError.msBeforeNext || 1000) / 1000),
+    });
+    return true;
+  }
+  return false;
 };
 
 //creates a socket.io server and attached it to http server
@@ -130,10 +209,16 @@ export const initializeSocket = (server: HttpServer) => {
       const decoded = jwt.verify(
         token as string,
         process.env.JWT_SECRET
-      ) as JwtPayload;
+      ) as CustomJwtPayload;
 
-      //attach userId to socket
-      socket.userId = decoded.id || decoded.userId;
+      //attach userId to socket - normalize JWT payload structure
+      const userId = decoded.id || decoded.userId;
+
+      if (!userId) {
+        return next(new Error("Invalid token: missing user ID"));
+      }
+
+      socket.userId = userId;
 
       console.log(`socket authenticated: user ${socket.userId}`);
       next();
@@ -145,7 +230,14 @@ export const initializeSocket = (server: HttpServer) => {
 
   //connection event//
   io.on("connection", async (socket: AuthenticatedSocket) => {
-    const userId = socket.userId!;
+    // Validate userId exists (should always be true after auth middleware)
+    if (!socket.userId) {
+      console.error("Connection without userId - this should not happen");
+      socket.disconnect();
+      return;
+    }
+
+    const userId = socket.userId;
     console.log(`user connected: ${userId} (socket: ${socket.id})`);
 
     //add user to online users map
@@ -158,10 +250,27 @@ export const initializeSocket = (server: HttpServer) => {
     io.emit("user_online", { userId });
 
     //join conversation room//
-    socket.on("join_conversation", async (conversationId: string) => {
+    socket.on("join_conversation", async (data: unknown) => {
       try {
         // Rate limit check
         await socketJoinConversationLimiter.consume(userId);
+
+        // Validate input with Zod
+        const validationResult = joinConversationSchema.safeParse(data);
+
+        if (!validationResult.success) {
+          const errors = validationResult.error.issues.map((issue) => ({
+            field: issue.path.join(".") || "conversationId",
+            message: issue.message,
+          }));
+          socket.emit("error", {
+            message: "Validation failed",
+            errors,
+          });
+          return;
+        }
+
+        const conversationId = validationResult.data;
 
         const conversation = await Conversation.findOne({
           _id: new mongoose.Types.ObjectId(conversationId),
@@ -184,40 +293,45 @@ export const initializeSocket = (server: HttpServer) => {
           conversationId,
         });
 
-        //mark message as delivered
-        const undeliveredMessages = await Message.updateMany(
-          {
-            conversationId: new mongoose.Types.ObjectId(conversationId),
-            senderId: { $ne: new mongoose.Types.ObjectId(userId) },
-            status: "sent",
-          },
-          {
-            $set: { status: "delivered", deliveredAt: new Date() },
-          }
-        );
+        // Mark messages as delivered within a transaction
+        const session = await mongoose.startSession();
+        try {
+          await session.withTransaction(async () => {
+            //mark message as delivered
+            const undeliveredMessages = await Message.updateMany(
+              {
+                conversationId: new mongoose.Types.ObjectId(conversationId),
+                senderId: { $ne: new mongoose.Types.ObjectId(userId) },
+                status: "sent",
+              },
+              {
+                $set: { status: "delivered", deliveredAt: new Date() },
+              },
+              { session }
+            );
 
-        // Notify other user about delivery
-        if (undeliveredMessages.modifiedCount > 0) {
-          const otherUserId = conversation.participants
-            .find((p) => p.toString() !== userId.toString())
-            ?.toString();
+            // Notify other user about delivery
+            if (undeliveredMessages.modifiedCount > 0) {
+              const otherUserId = conversation.participants
+                .find((p) => p.toString() !== userId.toString())
+                ?.toString();
 
-          if (otherUserId) {
-            io.to(`user:${otherUserId}`).emit("messages_delivered", {
-              conversationId,
-              count: undeliveredMessages.modifiedCount,
-            });
-
-            // Invalidate conversation cache after message status update
-            await invalidateConversationCache(conversationId);
-          }
-        }
-      } catch (error: any) {
-        if (error?.remainingPoints !== undefined) {
-          socket.emit("error", {
-            message: "Rate limit exceeded. Please slow down.",
-            retryAfter: Math.ceil(error.msBeforeNext / 1000),
+              if (otherUserId) {
+                io.to(`user:${otherUserId}`).emit("messages_delivered", {
+                  conversationId,
+                  count: undeliveredMessages.modifiedCount,
+                });
+              }
+            }
           });
+
+          // Invalidate conversation cache after successful transaction
+          await invalidateConversationCache(conversationId);
+        } finally {
+          await session.endSession();
+        }
+      } catch (error) {
+        if (handleRateLimitError(socket, error)) {
           return;
         }
         console.error("Error joining conversation:", error);
@@ -226,14 +340,36 @@ export const initializeSocket = (server: HttpServer) => {
     });
 
     //leave conversation room//
-    socket.on("leave_conversation", (conversationId: string) => {
-      socket.leave(`conversation:${conversationId}`);
-      console.log(`user ${userId} left the conversation`);
+    socket.on("leave_conversation", (data: unknown) => {
+      try {
+        // Validate input with Zod
+        const validationResult = leaveConversationSchema.safeParse(data);
 
-      socket.to(`conversation:${conversationId}`).emit("user_left", {
-        userId,
-        conversationId,
-      });
+        if (!validationResult.success) {
+          const errors = validationResult.error.issues.map((issue) => ({
+            field: issue.path.join(".") || "conversationId",
+            message: issue.message,
+          }));
+          socket.emit("error", {
+            message: "Validation failed",
+            errors,
+          });
+          return;
+        }
+
+        const conversationId = validationResult.data;
+
+        socket.leave(`conversation:${conversationId}`);
+        console.log(`user ${userId} left the conversation`);
+
+        socket.to(`conversation:${conversationId}`).emit("user_left", {
+          userId,
+          conversationId,
+        });
+      } catch (error) {
+        console.error("Error leaving conversation:", error);
+        socket.emit("error", { message: "Failed to leave conversation" });
+      }
     });
 
     //send real-time msg
@@ -260,50 +396,92 @@ export const initializeSocket = (server: HttpServer) => {
         const { conversationId, content, messageType, fileUrl, fileName } =
           validationResult.data;
 
-        const conversation = await Conversation.findOne({
-          _id: new mongoose.Types.ObjectId(conversationId),
-          participants: new mongoose.Types.ObjectId(userId),
-        });
+        // Start a MongoDB session for transaction
+        const session = await mongoose.startSession();
+        let message: InstanceType<typeof Message> | undefined | null;
+        let conversation: InstanceType<typeof Conversation> | undefined | null;
+        let otherUserId: string | undefined;
 
-        if (!conversation) {
-          socket.emit("error", { message: "Conversation not found" });
-          return;
+        try {
+          await session.withTransaction(async () => {
+            // Find and verify conversation access within transaction
+            conversation = await Conversation.findOne({
+              _id: new mongoose.Types.ObjectId(conversationId),
+              participants: new mongoose.Types.ObjectId(userId),
+            }).session(session);
+
+            if (!conversation) {
+              throw new Error("Conversation not found");
+            }
+
+            // Create message within transaction
+            const messages = await Message.create(
+              [
+                {
+                  conversationId: new mongoose.Types.ObjectId(conversationId),
+                  senderId: new mongoose.Types.ObjectId(userId),
+                  content,
+                  messageType: messageType || "text",
+                  status: "sent",
+                  ...(fileUrl && { fileUrl }),
+                  ...(fileName && { fileName }),
+                },
+              ],
+              { session }
+            );
+            message = messages[0];
+
+            // Update conversation metadata within transaction
+            conversation.lastMessage = {
+              content,
+              senderId: new mongoose.Types.ObjectId(userId),
+              timestamp: new Date(),
+            };
+
+            otherUserId = conversation.participants
+              .find((p) => p.toString() !== userId.toString())
+              ?.toString();
+
+            if (otherUserId) {
+              const currentUnread =
+                conversation.unreadCount.get(otherUserId) || 0;
+              conversation.unreadCount.set(otherUserId, currentUnread + 1);
+            }
+
+            await conversation.save({ session });
+          });
+
+          // Ensure message and conversation are defined after transaction
+          if (!message || !conversation) {
+            throw new Error(
+              "Transaction failed to create message or update conversation"
+            );
+          }
+
+          // Populate after transaction completes
+          await message.populate("senderId", "firstName lastName email");
+
+          // Invalidate caches after successful transaction
+          await invalidateConversationCache(conversationId);
+          await Promise.all(
+            conversation.participants.map(
+              (participantId: mongoose.Types.ObjectId) =>
+                invalidateUserConversationsCache(participantId.toString())
+            )
+          );
+        } catch (transactionError) {
+          await session.endSession();
+          if (
+            transactionError instanceof Error &&
+            transactionError.message === "Conversation not found"
+          ) {
+            socket.emit("error", { message: "Conversation not found" });
+            return;
+          }
+          throw transactionError;
         }
 
-        const message = await Message.create({
-          conversationId: new mongoose.Types.ObjectId(conversationId),
-          senderId: new mongoose.Types.ObjectId(userId),
-          content,
-          messageType: messageType || "text",
-          status: "sent",
-          ...(fileUrl && { fileUrl }),
-          ...(fileName && { fileName }),
-        });
-
-        await message.populate("senderId", "firstName lastName email");
-
-        conversation.lastMessage = {
-          content,
-          senderId: new mongoose.Types.ObjectId(userId),
-          timestamp: new Date(),
-        };
-
-        const otherUserId = conversation.participants
-          .find((p) => p.toString() !== userId.toString())
-          ?.toString();
-
-        if (otherUserId) {
-          const currentUnread = conversation.unreadCount.get(otherUserId) || 0;
-          conversation.unreadCount.set(otherUserId, currentUnread + 1);
-        }
-
-        await conversation.save();
-        await invalidateConversationCache(conversationId);
-        await Promise.all(
-          conversation.participants.map((participantId) =>
-            invalidateUserConversationsCache(participantId.toString())
-          )
-        );
+        await session.endSession();
 
         //real-time emit message
         io.to(`conversation:${conversationId}`).emit("new_message", {
@@ -338,12 +516,14 @@ export const initializeSocket = (server: HttpServer) => {
         }
 
         console.log(`Message sent in conversation`);
-      } catch (error: any) {
-        if (error?.remainingPoints !== undefined) {
-          socket.emit("error", {
-            message: "Rate limit exceeded. You're sending messages too fast.",
-            retryAfter: Math.ceil(error.msBeforeNext / 1000),
-          });
+      } catch (error) {
+        if (
+          handleRateLimitError(
+            socket,
+            error,
+            "Rate limit exceeded. You're sending messages too fast."
+          )
+        ) {
           return;
         }
         console.log(error);
@@ -352,117 +532,166 @@ export const initializeSocket = (server: HttpServer) => {
     });
 
     //typing indicator//
-    socket.on(
-      "typing",
-      async (data: { conversationId: string; isTyping: boolean }) => {
-        try {
-          // Rate limit check
-          await socketTypingLimiter.consume(userId);
+    socket.on("typing", async (data: unknown) => {
+      try {
+        // Rate limit check
+        await socketTypingLimiter.consume(userId);
 
-          const { conversationId, isTyping } = data;
+        // Validate input with Zod
+        const validationResult = typingSchema.safeParse(data);
 
-          socket.to(`conversation:${conversationId}`).emit("user_typing", {
-            userId,
-            conversationId,
-            isTyping,
+        if (!validationResult.success) {
+          const errors = validationResult.error.issues.map((issue) => ({
+            field: issue.path.join("."),
+            message: issue.message,
+          }));
+          socket.emit("error", {
+            message: "Validation failed",
+            errors,
           });
-        } catch (error: any) {
-          if (error?.remainingPoints !== undefined) {
-            // Silently ignore typing rate limits to avoid spamming errors
-            return;
-          }
-          console.error("Typing event error:", error);
+          return;
         }
+
+        const { conversationId, isTyping } = validationResult.data;
+
+        socket.to(`conversation:${conversationId}`).emit("user_typing", {
+          userId,
+          conversationId,
+          isTyping,
+        });
+      } catch (error) {
+        const rateLimitError = error as RateLimitError;
+        if (rateLimitError.remainingPoints !== undefined) {
+          // Silently ignore typing rate limits to avoid spamming errors
+          return;
+        }
+        console.error("Typing event error:", error);
       }
-    );
+    });
 
     //mark as read
-    socket.on(
-      "mark_as_read",
-      async (data: { conversationId: string; messageId?: string }) => {
+    socket.on("mark_as_read", async (data: unknown) => {
+      try {
+        // Rate limit check
+        await socketMarkAsReadLimiter.consume(userId);
+
+        // Validate input with Zod
+        const validationResult = markAsReadSchema.safeParse(data);
+
+        if (!validationResult.success) {
+          const errors = validationResult.error.issues.map((issue) => ({
+            field: issue.path.join("."),
+            message: issue.message,
+          }));
+          socket.emit("error", {
+            message: "Validation failed",
+            errors,
+          });
+          return;
+        }
+
+        const { conversationId, messageId } = validationResult.data;
+
+        const conversation = await Conversation.findOne({
+          _id: new mongoose.Types.ObjectId(conversationId),
+          participants: new mongoose.Types.ObjectId(userId),
+        });
+
+        if (!conversation) {
+          socket.emit("error", { message: "Conversation not found" });
+          return;
+        }
+
+        // Build query to mark messages as read
+        interface MessageQuery {
+          conversationId: mongoose.Types.ObjectId;
+          senderId: { $ne: mongoose.Types.ObjectId };
+          isRead: boolean;
+          createdAt?: { $lte: Date };
+        }
+
+        const query: MessageQuery = {
+          conversationId: new mongoose.Types.ObjectId(conversationId),
+          senderId: { $ne: new mongoose.Types.ObjectId(userId) },
+          isRead: false,
+        };
+
+        // If messageId provided, only mark messages up to that message
+        if (messageId) {
+          const targetMessage = await Message.findById(messageId);
+          if (targetMessage) {
+            query.createdAt = { $lte: targetMessage.createdAt };
+          }
+        }
+
+        // Wrap in transaction for atomicity
+        const session = await mongoose.startSession();
+        let messagesToUpdate: Array<{ _id: mongoose.Types.ObjectId }> = [];
+        let modifiedCount = 0;
+
         try {
-          // Rate limit check
-          await socketMarkAsReadLimiter.consume(userId);
+          await session.withTransaction(async () => {
+            // Get the messages before updating them
+            messagesToUpdate = await Message.find(query)
+              .select("_id")
+              .session(session);
 
-          const { conversationId, messageId } = data;
+            const result = await Message.updateMany(
+              query,
+              {
+                $set: {
+                  isRead: true,
+                  readAt: new Date(),
+                  status: "read",
+                },
+              },
+              { session }
+            );
 
-          const conversation = await Conversation.findOne({
-            _id: new mongoose.Types.ObjectId(conversationId),
-            participants: new mongoose.Types.ObjectId(userId),
+            modifiedCount = result.modifiedCount;
+
+            // Reset unread count
+            conversation.unreadCount.set(userId.toString(), 0);
+            await conversation.save({ session });
           });
 
-          if (!conversation) {
-            socket.emit("error", { message: "Conversation not found" });
-            return;
-          }
-
-          // Build query to mark messages as read
-          const query: any = {
-            conversationId: new mongoose.Types.ObjectId(conversationId),
-            senderId: { $ne: new mongoose.Types.ObjectId(userId) },
-            isRead: false,
-          };
-
-          // If messageId provided, only mark messages up to that message
-          if (messageId) {
-            const targetMessage = await Message.findById(messageId);
-            if (targetMessage) {
-              query.createdAt = { $lte: targetMessage.createdAt };
-            }
-          }
-
-          // Get the messages before updating them
-          const messagesToUpdate = await Message.find(query).select("_id");
-
-          const result = await Message.updateMany(query, {
-            $set: {
-              isRead: true,
-              readAt: new Date(),
-              status: "read",
-            },
-          });
-
-          // Reset unread count
-          conversation.unreadCount.set(userId.toString(), 0);
-          await conversation.save();
-
+          // Invalidate caches after successful transaction
           await invalidateConversationCache(conversationId);
           await Promise.all(
-            conversation.participants.map((participantId) =>
-              invalidateUserConversationsCache(participantId.toString())
+            conversation.participants.map(
+              (participantId: mongoose.Types.ObjectId) =>
+                invalidateUserConversationsCache(participantId.toString())
             )
           );
-
-          // Notify other user that their messages were read
-          const otherUserId = conversation.participants
-            .find((p) => p.toString() !== userId.toString())
-            ?.toString();
-
-          if (otherUserId && result.modifiedCount > 0) {
-            io.to(`user:${otherUserId}`).emit("messages_read", {
-              conversationId,
-              readBy: userId,
-              messageIds: messagesToUpdate.map((m) => m._id),
-              readAt: new Date(),
-            });
-          }
-
-          console.log(
-            `Messages marked as read in conversation ${conversationId}`
-          );
-        } catch (error: any) {
-          if (error?.remainingPoints !== undefined) {
-            socket.emit("error", {
-              message: "Rate limit exceeded. Please slow down.",
-              retryAfter: Math.ceil(error.msBeforeNext / 1000),
-            });
-            return;
-          }
-          console.log(error);
-          socket.emit("error", { message: "Couldnt mark message as read" });
+        } finally {
+          await session.endSession();
         }
+
+        // Notify other user that their messages were read
+        const otherUserId = conversation.participants
+          .find((p) => p.toString() !== userId.toString())
+          ?.toString();
+
+        if (otherUserId && modifiedCount > 0) {
+          io.to(`user:${otherUserId}`).emit("messages_read", {
+            conversationId,
+            readBy: userId,
+            messageIds: messagesToUpdate.map((m) => m._id),
+            readAt: new Date(),
+          });
+        }
+
+        console.log(
+          `Messages marked as read in conversation ${conversationId}`
+        );
+      } catch (error) {
+        if (handleRateLimitError(socket, error)) {
+          return;
+        }
+        console.log(error);
+        socket.emit("error", { message: "Couldnt mark message as read" });
       }
-    );
+    });
 
     //disconnect//
     socket.on("disconnect", async () => {
