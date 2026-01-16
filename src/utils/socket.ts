@@ -437,6 +437,10 @@ export const initializeSocket = (server: HttpServer) => {
               throw new Error("Conversation not found");
             }
 
+            // Determine initial status based on online check
+            const initialStatus = shouldMarkAsDelivered ? "delivered" : "sent";
+            const deliveredAt = shouldMarkAsDelivered ? new Date() : undefined;
+
             // Create message within transaction
             const messages = await Message.create(
               [
@@ -445,7 +449,8 @@ export const initializeSocket = (server: HttpServer) => {
                   senderId: new mongoose.Types.ObjectId(userId),
                   content,
                   messageType: messageType || "text",
-                  status: "sent",
+                  status: initialStatus,
+                  ...(deliveredAt && { deliveredAt }),
                   ...(fileUrl && { fileUrl }),
                   ...(fileName && { fileName }),
                 },
@@ -460,10 +465,6 @@ export const initializeSocket = (server: HttpServer) => {
               senderId: new mongoose.Types.ObjectId(userId),
               timestamp: new Date(),
             };
-
-            otherUserId = conversation.participants
-              .find((p) => p.toString() !== userId.toString())
-              ?.toString();
 
             if (otherUserId) {
               const currentUnread =
