@@ -403,6 +403,29 @@ export const initializeSocket = (server: HttpServer) => {
         let otherUserId: string | undefined;
 
         try {
+          const conversationPreCheck = await Conversation.findOne({
+            _id: new mongoose.Types.ObjectId(conversationId),
+            participants: new mongoose.Types.ObjectId(userId),
+          });
+
+          if (!conversationPreCheck) {
+            socket.emit("error", { message: "Conversation not found" });
+            return;
+          }
+
+          otherUserId = conversationPreCheck.participants
+            .find((p) => p.toString() !== userId.toString())
+            ?.toString();
+
+          // Check if recipient is online BEFORE the transaction
+          if (otherUserId) {
+            const recipientSocketId = await getOnlineUserSocketId(otherUserId);
+            const isInConversationRoom =
+              recipientSocketId &&
+              io.sockets.adapter.rooms.get(`conversation:${conversationId}`);
+            shouldMarkAsDelivered = !!isInConversationRoom;
+          }
+
           await session.withTransaction(async () => {
             // Find and verify conversation access within transaction
             conversation = await Conversation.findOne({
