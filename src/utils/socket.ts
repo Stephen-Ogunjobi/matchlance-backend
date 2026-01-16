@@ -513,6 +513,15 @@ export const initializeSocket = (server: HttpServer) => {
           conversationId,
         });
 
+        // Notify sender if message was delivered
+        if (shouldMarkAsDelivered) {
+          socket.emit("message_delivered", {
+            messageId: message._id,
+            conversationId,
+            deliveredAt: message.deliveredAt,
+          });
+        }
+
         //check if recipient is online and in convo room
         if (otherUserId) {
           const recipientSocketId = await getOnlineUserSocketId(otherUserId);
