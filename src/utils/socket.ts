@@ -531,32 +531,6 @@ export const initializeSocket = (server: HttpServer) => {
           });
         }
 
-        //check if recipient is online and in convo room
-        if (otherUserId) {
-          const recipientSocketId = await getOnlineUserSocketId(otherUserId);
-          const isInConversationRoom =
-            recipientSocketId &&
-            io.sockets.adapter.rooms.get(`conversation:${conversationId}`);
-
-          if (isInConversationRoom) {
-            message.status = "delivered";
-            message.deliveredAt = new Date();
-            await message.save();
-
-            socket.emit("message_delivered", {
-              messageId: message._id,
-              conversationId,
-              deliveredAt: message.deliveredAt,
-            });
-          }
-
-          io.to(`user:${otherUserId}`).emit("conversation_update", {
-            conversationId,
-            lastMessage: conversation.lastMessage,
-            unreadCount: conversation.unreadCount.get(otherUserId),
-          });
-        }
-
         console.log(`Message sent in conversation`);
       } catch (error) {
         if (
