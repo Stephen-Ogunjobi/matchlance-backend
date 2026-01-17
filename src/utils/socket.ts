@@ -401,6 +401,7 @@ export const initializeSocket = (server: HttpServer) => {
         let message: InstanceType<typeof Message> | undefined | null;
         let conversation: InstanceType<typeof Conversation> | undefined | null;
         let otherUserId: string | undefined;
+        let shouldMarkAsDelivered = false;
 
         try {
           const conversationPreCheck = await Conversation.findOne({
