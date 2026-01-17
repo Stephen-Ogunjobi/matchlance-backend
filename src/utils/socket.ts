@@ -522,6 +522,15 @@ export const initializeSocket = (server: HttpServer) => {
           });
         }
 
+        // Send conversation update to recipient
+        if (otherUserId) {
+          io.to(`user:${otherUserId}`).emit("conversation_update", {
+            conversationId,
+            lastMessage: conversation.lastMessage,
+            unreadCount: conversation.unreadCount.get(otherUserId),
+          });
+        }
+
         //check if recipient is online and in convo room
         if (otherUserId) {
           const recipientSocketId = await getOnlineUserSocketId(otherUserId);
