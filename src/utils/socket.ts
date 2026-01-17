@@ -1,7 +1,6 @@
 import type { Server as HttpServer } from "http";
-import type { Socket } from "socket.io";
-import { Server as SocketIOServer } from "socket.io";
-import jwt, { type JwtPayload } from "jsonwebtoken";
+import { Server as SocketIOServer, type Socket } from "socket.io";
+import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
 import { Conversation, Message } from "../models/chat.js";
 import mongoose, { type ClientSession } from "mongoose";
@@ -24,29 +23,13 @@ import {
   typingSchema,
   markAsReadSchema,
 } from "./socket/validation.js";
+import type {
+  CustomJwtPayload,
+  AuthenticatedSocket,
+  RateLimitError,
+} from "./socket/types.js";
 
 dotenv.config();
-
-// Type definitions for better type safety
-interface CustomJwtPayload extends JwtPayload {
-  id?: string;
-  userId?: string;
-}
-
-interface TypingEventData {
-  conversationId: string;
-  isTyping: boolean;
-}
-
-interface MarkAsReadEventData {
-  conversationId: string;
-  messageId?: string;
-}
-
-interface RateLimitError extends Error {
-  remainingPoints?: number;
-  msBeforeNext?: number;
-}
 
 const parseCookies = (cookieString: string): Record<string, string> => {
   const cookies: Record<string, string> = {};
@@ -61,11 +44,6 @@ const parseCookies = (cookieString: string): Record<string, string> => {
 
   return cookies;
 };
-
-//add userId to each socket connection
-interface AuthenticatedSocket extends Socket {
-  userId?: string;
-}
 
 //redis key for online users
 const ONLINE_USERS_KEY = "online_users";
