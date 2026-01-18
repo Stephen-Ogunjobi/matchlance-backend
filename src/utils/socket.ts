@@ -313,7 +313,7 @@ export const initializeSocket = (server: HttpServer) => {
             .find((p) => p.toString() !== userId.toString())
             ?.toString();
 
-          // Check if recipient is online BEFORE the transaction
+          // check if recipent is online bfore transaction
           if (otherUserId) {
             const recipientSocketId = await getOnlineUserSocketId(otherUserId);
             const isInConversationRoom =
