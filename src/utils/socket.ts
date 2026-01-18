@@ -78,7 +78,6 @@ export const initializeSocket = (server: HttpServer) => {
         const cookieHeader = socket.handshake.headers.cookie;
         if (cookieHeader) {
           const cookies = parseCookies(cookieHeader);
-          // Check common cookie names for JWT token
           token =
             cookies.token ||
             cookies.jwt ||
@@ -120,7 +119,6 @@ export const initializeSocket = (server: HttpServer) => {
 
   //connection event//
   io.on("connection", async (socket: AuthenticatedSocket) => {
-    // Validate userId exists (should always be true after auth middleware)
     if (!socket.userId) {
       console.error("Connection without userId - this should not happen");
       socket.disconnect();
@@ -156,7 +154,6 @@ export const initializeSocket = (server: HttpServer) => {
 
         const conversationId = validationResult.data;
 
-        // Use cache for conversation lookup
         const conversation = await getCachedConversation(conversationId);
 
         if (!conversation) {
@@ -166,7 +163,6 @@ export const initializeSocket = (server: HttpServer) => {
           return;
         }
 
-        // Verify user is a participant
         const isParticipant = conversation.participants.some(
           (p) => p.toString() === userId.toString()
         );
@@ -187,7 +183,7 @@ export const initializeSocket = (server: HttpServer) => {
           conversationId,
         });
 
-        // Mark messages as delivered within a transaction
+        // starts a transaction
         const session = await mongoose.startSession();
         try {
           await session.withTransaction(async () => {
@@ -219,7 +215,6 @@ export const initializeSocket = (server: HttpServer) => {
             }
           });
 
-          // Invalidate conversation cache after successful transaction
           await invalidateConversationCache(conversationId);
         } finally {
           await session.endSession();
@@ -269,10 +264,8 @@ export const initializeSocket = (server: HttpServer) => {
     //send real-time msg
     socket.on("send_message", async (data: unknown) => {
       try {
-        // Rate limit check
         await socketSendMessageLimiter.consume(userId);
 
-        // Validate input with Zod
         const validationResult = sendMessageSchema.safeParse(data);
 
         if (!validationResult.success) {
@@ -298,7 +291,6 @@ export const initializeSocket = (server: HttpServer) => {
         let shouldMarkAsDelivered = false;
 
         try {
-          // Use cache for conversation lookup
           const conversationPreCheck = await getCachedConversation(
             conversationId
           );
@@ -308,7 +300,6 @@ export const initializeSocket = (server: HttpServer) => {
             return;
           }
 
-          // Verify user is a participant
           const isParticipant = conversationPreCheck.participants.some(
             (p) => p.toString() === userId.toString()
           );
