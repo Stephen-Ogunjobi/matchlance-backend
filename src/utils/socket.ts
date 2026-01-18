@@ -129,22 +129,16 @@ export const initializeSocket = (server: HttpServer) => {
     const userId = socket.userId;
     console.log(`user connected: ${userId} (socket: ${socket.id})`);
 
-    //add user to online users map
     await addOnlineUser(userId, socket.id);
 
-    //join user to their personal room
     socket.join(`user:${userId}`);
 
-    //online notification
     io.emit("user_online", { userId });
 
-    //join conversation room//
     socket.on("join_conversation", async (data: unknown) => {
       try {
-        // Rate limit check
         await socketJoinConversationLimiter.consume(userId);
 
-        // Validate input with Zod
         const validationResult = joinConversationSchema.safeParse(data);
 
         if (!validationResult.success) {
