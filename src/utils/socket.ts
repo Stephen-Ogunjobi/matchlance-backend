@@ -13,6 +13,7 @@ import {
 import { pubClient, redisClient, subClient } from "../config/redis.js";
 import { createAdapter } from "@socket.io/redis-adapter";
 import {
+  getCachedConversation,
   invalidateConversationCache,
   invalidateUserConversationsCache,
 } from "./conversationCache.js";
@@ -155,12 +156,22 @@ export const initializeSocket = (server: HttpServer) => {
 
         const conversationId = validationResult.data;
 
-        const conversation = await Conversation.findOne({
-          _id: new mongoose.Types.ObjectId(conversationId),
-          participants: new mongoose.Types.ObjectId(userId),
-        });
+        // Use cache for conversation lookup
+        const conversation = await getCachedConversation(conversationId);
 
         if (!conversation) {
+          socket.emit("error", {
+            message: "Access denied to this conversation",
+          });
+          return;
+        }
+
+        // Verify user is a participant
+        const isParticipant = conversation.participants.some(
+          (p) => p.toString() === userId.toString()
+        );
+
+        if (!isParticipant) {
           socket.emit("error", {
             message: "Access denied to this conversation",
           });
@@ -287,12 +298,22 @@ export const initializeSocket = (server: HttpServer) => {
         let shouldMarkAsDelivered = false;
 
         try {
-          const conversationPreCheck = await Conversation.findOne({
-            _id: new mongoose.Types.ObjectId(conversationId),
-            participants: new mongoose.Types.ObjectId(userId),
-          });
+          // Use cache for conversation lookup
+          const conversationPreCheck = await getCachedConversation(
+            conversationId
+          );
 
           if (!conversationPreCheck) {
+            socket.emit("error", { message: "Conversation not found" });
+            return;
+          }
+
+          // Verify user is a participant
+          const isParticipant = conversationPreCheck.participants.some(
+            (p) => p.toString() === userId.toString()
+          );
+
+          if (!isParticipant) {
             socket.emit("error", { message: "Conversation not found" });
             return;
           }
@@ -492,10 +513,26 @@ export const initializeSocket = (server: HttpServer) => {
 
         const { conversationId, messageId } = validationResult.data;
 
-        const conversation = await Conversation.findOne({
-          _id: new mongoose.Types.ObjectId(conversationId),
-          participants: new mongoose.Types.ObjectId(userId),
-        });
+        // Use cache for conversation lookup
+        const cachedConversation = await getCachedConversation(conversationId);
+
+        if (!cachedConversation) {
+          socket.emit("error", { message: "Conversation not found" });
+          return;
+        }
+
+        // Verify user is a participant
+        const isParticipant = cachedConversation.participants.some(
+          (p) => p.toString() === userId.toString()
+        );
+
+        if (!isParticipant) {
+          socket.emit("error", { message: "Conversation not found" });
+          return;
+        }
+
+        // We need the actual Conversation document for save() method later
+        const conversation = await Conversation.findById(conversationId);
 
         if (!conversation) {
           socket.emit("error", { message: "Conversation not found" });
