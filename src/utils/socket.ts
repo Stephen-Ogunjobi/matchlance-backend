@@ -28,22 +28,9 @@ import type {
   AuthenticatedSocket,
   RateLimitError,
 } from "./socket/types.js";
+import { parseCookies, handleRateLimitError } from "./socket/helpers.js";
 
 dotenv.config();
-
-const parseCookies = (cookieString: string): Record<string, string> => {
-  const cookies: Record<string, string> = {};
-  if (!cookieString) return cookies;
-
-  cookieString.split(";").forEach((cookie) => {
-    const [name, ...rest] = cookie.trim().split("=");
-    if (name && rest.length > 0) {
-      cookies[name] = decodeURIComponent(rest.join("="));
-    }
-  });
-
-  return cookies;
-};
 
 //redis key for online users
 const ONLINE_USERS_KEY = "online_users";
@@ -66,23 +53,6 @@ const getOnlineUserSocketId = async (
 const getAllOnlineUsers = async (): Promise<string[]> => {
   const users = await redisClient.hkeys(ONLINE_USERS_KEY);
   return users;
-};
-
-//helper function for rate limit error handling
-const handleRateLimitError = (
-  socket: Socket,
-  error: unknown,
-  customMessage?: string
-): boolean => {
-  const rateLimitError = error as RateLimitError;
-  if (rateLimitError.remainingPoints !== undefined) {
-    socket.emit("error", {
-      message: customMessage || "Rate limit exceeded. Please slow down.",
-      retryAfter: Math.ceil((rateLimitError.msBeforeNext || 1000) / 1000),
-    });
-    return true;
-  }
-  return false;
 };
 
 //creates a socket.io server and attached it to http server
