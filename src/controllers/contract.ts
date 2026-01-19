@@ -92,7 +92,6 @@ export const createContract = async (
     //start transaction
     session.startTransaction();
 
-    // Declare contract variable outside try block so it's accessible after transaction
     let contract: IContract[] | undefined;
 
     try {
@@ -199,3 +198,5 @@ export const createContract = async (
     return res.status(500).json({ error: "Internal server error" });
   }
 };
+
+

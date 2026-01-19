@@ -1,11 +1,8 @@
 import type { Socket } from "socket.io";
 import type { RateLimitError } from "./types.js";
 
-/**
- * Parses cookie string into key-value pairs
- * @param cookieString - The cookie string from request headers
- * @returns Object containing parsed cookies
- */
+//Parses cookie string into key value pairs
+
 export const parseCookies = (
   cookieString: string
 ): Record<string, string> => {
@@ -22,13 +19,7 @@ export const parseCookies = (
   return cookies;
 };
 
-/**
- * Helper function for rate limit error handling
- * @param socket - The socket instance
- * @param error - The error object
- * @param customMessage - Optional custom error message
- * @returns true if rate limit error was handled, false otherwise
- */
+
 export const handleRateLimitError = (
   socket: Socket,
   error: unknown,

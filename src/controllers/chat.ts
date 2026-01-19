@@ -22,7 +22,7 @@ export const getConversationByProposal = async (
       });
     }
 
-    // Step 1: Find conversation ID (lightweight query)
+    
     const conversationDoc = await Conversation.findOne({
       proposalId: new mongoose.Types.ObjectId(proposalId),
       participants: new mongoose.Types.ObjectId(userId),
@@ -37,7 +37,7 @@ export const getConversationByProposal = async (
       });
     }
 
-    // Step 2: Get full conversation from cache
+    
     const conversation = await getCachedConversation(
       conversationDoc._id.toString()
     );
@@ -74,7 +74,6 @@ export const getChats = async (req: Request, res: Response) => {
       });
     }
 
-    // Get conversation from cache
     const conversation = await getCachedConversation(conversationId);
 
     if (!conversation) {
