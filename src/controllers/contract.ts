@@ -200,3 +200,34 @@ export const createContract = async (
 };
 
 
+export const getContract = async (
+  req: Request,
+  res: Response
+): Promise<Response> => {
+  try {
+    const userId = req.user?.userId;
+    const conversationId = req.params.conversationId;
+
+    if (!userId || !conversationId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const contract = await Contract.findOne({ conversationId }).lean();
+
+    if (!contract) {
+      return res.status(404).json({ error: "Contract not found" });
+    }
+
+    // Verify user is part of the contract
+    if (
+      contract.clientId.toString() !== userId.toString() 
+    ) {
+      return res.status(403).json({ error: "Unauthorized" });
+    }
+
+    return res.status(200).json({ contract });
+  } catch (error) {
+    console.error("Error fetching contract:", error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+};
