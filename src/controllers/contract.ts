@@ -200,7 +200,7 @@ export const createContract = async (
 };
 
 
-export const getContract = async (
+export const getContractByConversation = async (
   req: Request,
   res: Response
 ): Promise<Response> => {
@@ -221,6 +221,43 @@ export const getContract = async (
     // Verify user is part of the contract
     if (
       contract.clientId.toString() !== userId.toString() 
+    ) {
+      return res.status(403).json({ error: "Unauthorized" });
+    }
+
+    return res.status(200).json({ contract });
+  } catch (error) {
+    console.error("Error fetching contract:", error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+export const getContract = async (
+  req: Request,
+  res: Response
+): Promise<Response> => {
+  try {
+    const userId = req.user?.userId;
+    const contractId = req.params.contractId;
+
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    if (!contractId) {
+      return res.status(400).json({ error: "Contract ID is required" });
+    }
+
+    const contract = await Contract.findById(contractId).lean();
+
+    if (!contract) {
+      return res.status(404).json({ error: "Contract not found" });
+    }
+
+    // Verify user is part of the contract (client or freelancer)
+    if (
+      contract.clientId.toString() !== userId.toString() ||
+      contract.freelancerId.toString() !== userId.toString()
     ) {
       return res.status(403).json({ error: "Unauthorized" });
     }
