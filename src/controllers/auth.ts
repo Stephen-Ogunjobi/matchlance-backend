@@ -15,8 +15,15 @@ import {
   sendVerificationEmail,
 } from "../utils/emailServices.js";
 import { getCachedUser, invalidateUserCached } from "../utils/userCache.js";
+import { isMongoError } from "../utils/errorHandler.js";
 
 dotenv.config();
+
+interface JwtPayload {
+  userId: string;
+  iat: number;
+  exp: number;
+}
 
 const SALT_ROUNDS = 10;
 
@@ -68,8 +75,8 @@ const postSignup = async (req: Request, res: Response): Promise<Response> => {
         isEmailVerified: user.isEmailVerified,
       },
     });
-  } catch (err: any) {
-    if (err.code === 11000) {
+  } catch (err: unknown) {
+    if (isMongoError(err) && err.code === 11000) {
       return res.status(409).json({ error: "Email already registered" });
     }
     console.log("signup error", err);
@@ -162,8 +169,8 @@ const handleGoogleCallback = async (
   res: Response
 ): Promise<Response | void> => {
   try {
-    const user = req.user as any;
-    if (!user) {
+    const user = req.user;
+    if (!user || !user.save) {
       return res.status(500).json({ message: "Something went wrong" });
     }
 
@@ -263,7 +270,7 @@ const postRefresh = async (req: Request, res: Response): Promise<Response> => {
     }
 
     //verify refresh token
-    const decoded = jwt.verify(refreshToken, secret) as any;
+    const decoded = jwt.verify(refreshToken, secret) as JwtPayload;
 
     const user = await User.findById(decoded.userId);
 
@@ -292,7 +299,7 @@ const postLogout = async (req: Request, res: Response): Promise<Response> => {
     if (!refreshToken) {
       return res.status(200).json({ message: "Logged out successfully" });
     }
-    const user = (await User.findOne({ refreshToken })) as any;
+    const user = await User.findOne({ refreshToken });
 
     if (!user) {
       return res.status(200).json({ message: "Logged out successfully" });
