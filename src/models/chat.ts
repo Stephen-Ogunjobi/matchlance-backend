@@ -128,6 +128,13 @@ messageSchema.index({ senderId: 1, isRead: 1 });
 conversationSchema.index({ participants: 1 });
 conversationSchema.index({ jobId: 1, proposalId: 1 });
 conversationSchema.index({ "lastMessage.timestamp": -1 });
+conversationSchema.index(
+  { proposalId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { proposalId: { $exists: true } },
+  }
+);
 
 // Validation: Must have 2 participants
 conversationSchema.pre("validate", function (this: IConversation) {
