@@ -7,7 +7,7 @@ const CLIENT_JOBS_CACHE_PREFIX = "jobs:client:";
 const MATCHED_JOBS_CACHE_PREFIX = "matched-jobs:";
 const JOB_CACHE_TTL = 3600;
 
-interface CachedJob {
+export interface CachedJob {
   _id: Types.ObjectId;
   title: string;
   description: string;

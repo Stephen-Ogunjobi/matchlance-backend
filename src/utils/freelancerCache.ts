@@ -5,7 +5,7 @@ import { Types } from "mongoose";
 const FREELANCER_CACHE_PREFIX = "freelancer:";
 const FREELANCER_CACHE_TTL = 3600; // 1 hour
 
-interface CachedFreelancerProfile {
+export interface CachedFreelancerProfile {
   _id: Types.ObjectId;
   freelancerId: Types.ObjectId;
   bio: string;

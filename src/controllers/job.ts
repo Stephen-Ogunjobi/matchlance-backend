@@ -3,14 +3,27 @@ import { Job } from "../models/job.js";
 import User from "../models/users.js";
 import { Proposal } from "../models/proposal.js";
 import { sendProposalAcceptanceEmail } from "../utils/emailServices.js";
-import mongoose from "mongoose";
+import mongoose, { Types } from "mongoose";
 import {
   getCachedJob,
   getCachedJobsByClient,
   invalidateJobCache,
   invalidateClientJobsCache,
 } from "../utils/jobCache.js";
-import { error } from "console";
+
+// Interfaces for populated documents
+interface PopulatedUser {
+  _id: Types.ObjectId;
+  firstName: string;
+  email: string;
+}
+
+interface PopulatedJob {
+  _id: Types.ObjectId;
+  title: string;
+  status: string;
+  clientId: PopulatedUser;
+}
 
 export const postNewJob = async (
   req: Request,
@@ -263,13 +276,13 @@ export const acceptJobProposal = async (
       return res.status(404).json({ error: "Freelancer not found" });
     }
 
-    const job = proposal.jobId as any;
-    const freelancer = proposal.freelancerId as any;
-    const client = job.clientId as any;
+    const job = proposal.jobId as unknown as PopulatedJob;
+    const freelancer = proposal.freelancerId as unknown as PopulatedUser;
+    const client = job.clientId;
 
     const freelancerId =
       typeof proposal.freelancerId === "object"
-        ? (proposal.freelancerId as any)._id
+        ? (proposal.freelancerId as unknown as PopulatedUser)._id
         : proposal.freelancerId;
 
     // Authorization check
@@ -385,8 +398,8 @@ export const rejectJobProposal = async (
       return res.status(404).json({ error: "Job not found" });
     }
 
-    const job = proposal.jobId as any;
-    const client = job.clientId as any;
+    const job = proposal.jobId as unknown as PopulatedJob;
+    const client = job.clientId;
 
     // Authorization check
     if (client._id.toString() !== userId.toString()) {
@@ -411,8 +424,8 @@ export const rejectJobProposal = async (
       message: "Proposal rejected successfully",
       proposal,
     });
-  } catch (error) {
-    console.error("Error rejecting proposal:", error);
+  } catch (err) {
+    console.error("Error rejecting proposal:", err);
     return res.status(500).json({
       error: "Failed to reject proposal",
     });

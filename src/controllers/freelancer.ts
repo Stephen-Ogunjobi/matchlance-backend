@@ -15,7 +15,10 @@ import {
   invalidateFreelancerCache,
   updateFreelancerCache,
   setFreelancerCache,
+  type CachedFreelancerProfile,
 } from "../utils/freelancerCache.js";
+import type { CachedJob } from "../utils/jobCache.js";
+import type { IJob } from "../models/job.js";
 
 export const postFreelancerProfile = async (
   req: Request,
@@ -60,7 +63,7 @@ export const postFreelancerProfile = async (
     });
 
     // Cache the newly created profile
-    await setFreelancerCache(newProfile.toObject() as any);
+    await setFreelancerCache(newProfile.toObject() as CachedFreelancerProfile);
 
     return res.status(201).json({ message: "Profile created" });
   } catch (err) {
@@ -100,7 +103,7 @@ export const getFreelancerProfile = async (
     }
 
     // Cache the profile for future requests
-    await setFreelancerCache(profile.toObject() as any);
+    await setFreelancerCache(profile.toObject() as CachedFreelancerProfile);
 
     return res.status(200).json({ freelancerProfile: profile });
   } catch (err) {
@@ -168,7 +171,7 @@ export const updateFreelancerProfile = async (
 
     // Update the cache with the new profile data
     if (updateProfile) {
-      await setFreelancerCache(updateProfile.toObject() as any);
+      await setFreelancerCache(updateProfile.toObject() as CachedFreelancerProfile);
     }
 
     // If skills, categories, or other matching-related fields were updated, invalidate matched jobs cache
@@ -238,7 +241,7 @@ export const uploadProfilePicture = async (
 
     // Update the cache with the new profile picture
     if (updatedProfile) {
-      await setFreelancerCache(updatedProfile.toObject() as any);
+      await setFreelancerCache(updatedProfile.toObject() as CachedFreelancerProfile);
     }
 
     return res.status(200).json({
@@ -302,7 +305,7 @@ export const getFreelancerMatchJobs = async (
       if (!profile) {
         return res.status(404).json({ error: "Profile could not be found" });
       }
-      const profileData = profile.toObject() as any;
+      const profileData = profile.toObject() as CachedFreelancerProfile;
       freelancerProfile = profileData;
       // Cache the profile for future requests
       await setFreelancerCache(profileData);
@@ -352,7 +355,7 @@ export const getFreelancerMatchJobs = async (
     ]);
 
     // Cache the results
-    await setMatchedJobsCache(freelancerId, matchJobs as any);
+    await setMatchedJobsCache(freelancerId, matchJobs as CachedJob[]);
 
     return res.status(200).json({ jobs: matchJobs });
   } catch (err) {
@@ -379,13 +382,15 @@ export const getFreelancerAcceptedJobs = async (
       status: "accepted",
     }).populate("jobId");
 
-    const acceptedJobs = acceptedProposals.map((proposal) => {
-      const job = proposal.jobId as any;
-      return {
-        ...job.toObject(),
-        proposalId: proposal._id,
-      };
-    });
+    const acceptedJobs = acceptedProposals
+      .filter((proposal) => proposal.jobId && typeof proposal.jobId === "object")
+      .map((proposal) => {
+        const job = proposal.jobId as unknown as IJob;
+        return {
+          ...job.toObject(),
+          proposalId: proposal._id,
+        };
+      });
 
     return res.status(200).json({ jobs: acceptedJobs });
   } catch (error) {

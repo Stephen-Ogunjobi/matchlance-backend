@@ -5,6 +5,7 @@ import { Proposal } from "../models/proposal.js";
 import User from "../models/users.js";
 import { sendProposalNotificationEmail } from "../utils/emailServices.js";
 import { invalidateMatchedJobsCache } from "../utils/jobCache.js";
+import { isMongoError } from "../utils/errorHandler.js";
 
 export const postProposal = async (
   req: Request,
@@ -103,9 +104,9 @@ export const postProposal = async (
     }
 
     return res.status(201).json({ proposal });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.log(error);
-    if (error.code === 11000) {
+    if (isMongoError(error) && error.code === 11000) {
       return res.status(409).json({
         error: "You have already submitted a proposal for this job",
       });
