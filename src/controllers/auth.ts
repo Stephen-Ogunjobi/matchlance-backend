@@ -68,7 +68,10 @@ const postSignup = async (req: Request, res: Response): Promise<Response> => {
         isEmailVerified: user.isEmailVerified,
       },
     });
-  } catch (err) {
+  } catch (err: any) {
+    if (err.code === 11000) {
+      return res.status(409).json({ error: "Email already registered" });
+    }
     console.log("signup error", err);
     return res.status(500).json({ error: "Something went wrong" });
   }
