@@ -159,7 +159,6 @@ const jobSchema = new Schema<IJob>(
   }
 );
 
-// Indexes for better query performance
 jobSchema.index({ title: "text", description: "text" });
 jobSchema.index({ category: 1, status: 1 });
 jobSchema.index({ skills: 1 });
