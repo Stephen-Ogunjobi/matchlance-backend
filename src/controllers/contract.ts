@@ -256,8 +256,7 @@ export const getContract = async (
 
     // Verify user is part of the contract (client or freelancer)
     if (
-      contract.clientId.toString() !== userId.toString() ||
-      contract.freelancerId.toString() !== userId.toString()
+      contract.clientId.toString() !== userId.toString() 
     ) {
       return res.status(403).json({ error: "Unauthorized" });
     }
