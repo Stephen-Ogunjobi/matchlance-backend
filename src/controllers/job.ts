@@ -10,6 +10,7 @@ import {
   invalidateJobCache,
   invalidateClientJobsCache,
 } from "../utils/jobCache.js";
+import { error } from "console";
 
 export const postNewJob = async (
   req: Request,
@@ -295,13 +296,13 @@ export const acceptJobProposal = async (
 
     let conversation;
     try {
+      // First check if conversation already exists
       conversation = await Conversation.findOne({
-        participants: { $all: [userId, proposal.freelancerId] },
-        jobId: job._id,
         proposalId: proposal._id,
       });
 
       if (!conversation) {
+        // Try to create - unique index on proposalId prevents duplicates
         conversation = await Conversation.create({
           participants: [
             new mongoose.Types.ObjectId(userId),
@@ -314,12 +315,19 @@ export const acceptJobProposal = async (
             [freelancerId.toString()]: 0,
           },
         });
-
         console.log("chat room created");
-        return res.status(200).json({ conversation });
       }
     } catch (error) {
-      return res.status(400).json({ error: "chat room could not be created" });
+      const mongoError = error as { code?: number };
+      if (mongoError.code === 11000) {
+        // Race condition: another request created the conversation
+        // Fetch the existing one (idempotent response)
+        conversation = await Conversation.findOne({
+          proposalId: proposal._id,
+        });
+      } else {
+        return res.status(400).json({ error: "chat room could not be created" });
+      }
     }
 
     // Send acceptance email (non-blocking)
@@ -341,6 +349,7 @@ export const acceptJobProposal = async (
       conversation,
     });
   } catch (error) {
+    
     console.error("Error accepting proposal:", error);
     return res.status(500).json({
       error: "Failed to accept proposal",
