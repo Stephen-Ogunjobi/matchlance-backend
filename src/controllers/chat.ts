@@ -52,7 +52,7 @@ export const getConversationByProposal = async (
     res.status(200).json({
       conversation,
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error fetching conversation:", error);
     res.status(500).json({
       message: "Failed to fetch conversation",
@@ -85,7 +85,9 @@ export const getChats = async (req: Request, res: Response) => {
 
     // Verify user is a participant
     const isParticipant = conversation.participants.some((p) => {
-      const participantId = typeof p === "object" && p !== null ? (p as any)._id : p;
+      // p can be ObjectId or populated user object with _id
+      const participantId =
+        "_id" in (p as object) ? (p as { _id: mongoose.Types.ObjectId })._id : p;
       return participantId.toString() === userId;
     });
 
