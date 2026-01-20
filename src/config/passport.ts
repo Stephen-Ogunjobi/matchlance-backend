@@ -1,5 +1,6 @@
 import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
+import type { Request } from "express";
 import dotenv from "dotenv";
 import User from "../models/users.js";
 import { invalidateUserCached } from "../utils/userCache.js";
@@ -13,9 +14,9 @@ passport.use(
       clientID: process.env.GOOGLE_CLIENT_ID || "",
       clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
       callbackURL: process.env.GOOGLE_CALLBACK_URL || "",
-      passReqToCallback: true, // Allow access to req in callback
+      passReqToCallback: true, 
     },
-    async (req: any, _accessToken, _refreshToken, profile, done) => {
+    async (req: Request, _accessToken, _refreshToken, profile, done) => {
       try {
         const email = profile.emails?.[0]?.value;
         const firstName = profile.name?.givenName || "";
@@ -27,10 +28,11 @@ passport.use(
 
         // Extract role from state parameter
         let role = "freelancer"; // default role
-        if (req.query.state) {
+        const state = req.query.state;
+        if (typeof state === "string") {
           try {
             const decodedState = JSON.parse(
-              Buffer.from(req.query.state, "base64").toString()
+              Buffer.from(state, "base64").toString()
             );
             role = decodedState.role || "freelancer";
           } catch (err) {
@@ -66,12 +68,13 @@ passport.use(
 );
 
 // store only user ID in session
-passport.serializeUser((user: any, done) => {
-  done(null, user._id.toString());
+passport.serializeUser((user, done) => {
+  const userDoc = user as Express.User;
+  done(null, userDoc._id?.toString());
 });
 
 // retrieve user from db
-passport.deserializeUser(async (id: any, done) => {
+passport.deserializeUser(async (id: string, done) => {
   try {
     const user = await User.findById(id);
     done(null, user);
