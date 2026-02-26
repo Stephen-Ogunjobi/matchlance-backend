@@ -11,6 +11,7 @@ import freenlancerRoute from "./routes/freelancer.js";
 import proposalRoutes from "./routes/proposal.js";
 import chatRoutes from "./routes/chat.js";
 import contractRoutes from "./routes/contract.js";
+import clientRoutes from "./routes/client.js";
 import passport from "passport";
 import cors from "cors";
 import "./config/passport.js";
@@ -69,6 +70,7 @@ app.use("/api/freelancer", freenlancerRoute);
 app.use("/api/proposal", proposalRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/contract", contractRoutes);
+app.use("/api/client", clientRoutes);
 
 const PORT = process.env.PORT || 3001;
 
