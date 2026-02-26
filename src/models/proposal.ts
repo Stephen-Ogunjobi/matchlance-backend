@@ -29,14 +29,12 @@ const proposalSchema = new Schema<IProposal>(
       type: Schema.Types.ObjectId,
       ref: "Job",
       required: [true, "Job ID is required"],
-      index: true,
     },
 
     freelancerId: {
       type: Schema.Types.ObjectId,
       ref: "User",
       required: [true, "Freelancer ID is required"],
-      index: true,
     },
 
     coverLetter: {
@@ -123,7 +121,6 @@ const proposalSchema = new Schema<IProposal>(
       type: String,
       enum: ["pending", "accepted", "rejected", "withdrawn"],
       default: "pending",
-      index: true,
     },
   },
   {

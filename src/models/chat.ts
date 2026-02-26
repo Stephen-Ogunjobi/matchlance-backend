@@ -100,7 +100,6 @@ const conversationSchema = new Schema<IConversation>(
     proposalId: {
       type: Schema.Types.ObjectId,
       ref: "Proposal",
-      index: true,
     },
     lastMessage: {
       content: String,
