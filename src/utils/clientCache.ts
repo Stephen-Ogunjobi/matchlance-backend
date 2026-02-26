@@ -3,7 +3,7 @@ import { ClientProfile } from "../models/client.js";
 import { Types } from "mongoose";
 
 const CLIENT_CACHE_PREFIX = "client:";
-const CLIENT_CACHE_TTL = 3600; // 1 hour
+const CLIENT_CACHE_TTL = 3600;
 
 export interface CachedClientProfile {
   _id: Types.ObjectId;
@@ -55,7 +55,7 @@ export interface CachedClientProfile {
 }
 
 export const getCachedClientProfile = async (
-  clientId: string
+  clientId: string,
 ): Promise<CachedClientProfile | null> => {
   try {
     const cacheKey = `${CLIENT_CACHE_PREFIX}${clientId}`;
@@ -71,7 +71,11 @@ export const getCachedClientProfile = async (
       return null;
     }
 
-    await redisClient.setex(cacheKey, CLIENT_CACHE_TTL, JSON.stringify(profile));
+    await redisClient.setex(
+      cacheKey,
+      CLIENT_CACHE_TTL,
+      JSON.stringify(profile),
+    );
 
     return profile as unknown as CachedClientProfile;
   } catch (err) {
@@ -84,7 +88,7 @@ export const getCachedClientProfile = async (
 };
 
 export const invalidateClientCache = async (
-  clientId: string
+  clientId: string,
 ): Promise<void> => {
   try {
     const cacheKey = `${CLIENT_CACHE_PREFIX}${clientId}`;
@@ -96,7 +100,7 @@ export const invalidateClientCache = async (
 
 export const updateClientCache = async (
   clientId: string,
-  profileData: Partial<CachedClientProfile>
+  profileData: Partial<CachedClientProfile>,
 ): Promise<void> => {
   try {
     const cacheKey = `${CLIENT_CACHE_PREFIX}${clientId}`;
@@ -108,7 +112,7 @@ export const updateClientCache = async (
       await redisClient.setex(
         cacheKey,
         CLIENT_CACHE_TTL,
-        JSON.stringify(updatedProfile)
+        JSON.stringify(updatedProfile),
       );
     }
   } catch (error) {
@@ -117,14 +121,14 @@ export const updateClientCache = async (
 };
 
 export const setClientCache = async (
-  profile: CachedClientProfile
+  profile: CachedClientProfile,
 ): Promise<void> => {
   try {
     const cacheKey = `${CLIENT_CACHE_PREFIX}${profile.clientId}`;
     await redisClient.setex(
       cacheKey,
       CLIENT_CACHE_TTL,
-      JSON.stringify(profile)
+      JSON.stringify(profile),
     );
   } catch (error) {
     console.error("Client cache set error:", error);
