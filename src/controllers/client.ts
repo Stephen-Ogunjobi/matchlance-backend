@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import mongoose from "mongoose";
 import { ClientProfile } from "../models/client.js";
 import User from "../models/users.js";
+import { deleteFile, getFilePathFronUrl } from "../config/upload.js";
 import {
   getCachedClientProfile,
   setClientCache,
@@ -173,5 +174,76 @@ export const deleteClientProfile = async (
   } catch (err) {
     console.error("Error deleting client profile:", err);
     return res.status(500).json({ error: "Error deleting profile" });
+  }
+};
+
+export const uploadClientProfilePicture = async (
+  req: Request,
+  res: Response
+): Promise<Response> => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: "No file uploaded" });
+    }
+
+    const userId = req.user?.userId;
+    const clientId = req.params.clientId;
+
+    if (!userId || !clientId) {
+      return res.status(400).json({ error: "Invalid request" });
+    }
+
+    if (userId.toString() !== clientId.toString()) {
+      await deleteFile(req.file.path);
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    const profile = await ClientProfile.findOne({ clientId });
+
+    if (!profile) {
+      await deleteFile(req.file.path);
+      return res.status(404).json({ error: "Profile not found" });
+    }
+
+    if (profile.profilePicture) {
+      try {
+        const oldFilePath = getFilePathFronUrl(profile.profilePicture);
+        await deleteFile(oldFilePath);
+      } catch (err) {
+        console.log("Failed to delete old profile picture:", err);
+      }
+    }
+
+    const profilePictureUrl = `/uploads/profile-pictures/${req.file.filename}`;
+
+    const updatedProfile = await ClientProfile.findOneAndUpdate(
+      { clientId },
+      { profilePicture: profilePictureUrl },
+      { new: true, runValidators: true }
+    );
+
+    if (updatedProfile) {
+      await setClientCache(
+        updatedProfile.toObject() as unknown as CachedClientProfile
+      );
+    }
+
+    return res.status(200).json({
+      message: "Profile picture uploaded successfully",
+      profilePicture: profilePictureUrl,
+      profile: updatedProfile,
+    });
+  } catch (err) {
+    console.error("Error uploading client profile picture:", err);
+
+    if (req.file) {
+      try {
+        await deleteFile(req.file.path);
+      } catch (deleteErr) {
+        console.error("Failed to cleanup uploaded file:", deleteErr);
+      }
+    }
+
+    return res.status(500).json({ error: "Error uploading profile picture" });
   }
 };
