@@ -216,9 +216,17 @@ export const uploadClientProfilePicture = async (
 
     const profilePictureUrl = `/uploads/profile-pictures/${req.file.filename}`;
 
+    // Recalculate completeness manually since findOneAndUpdate bypasses pre("save")
+    let completeness = 0;
+    if (profile.location?.country && profile.location?.timezone) completeness += 20;
+    completeness += 20; // profile picture is being set now
+    if (profile.bio) completeness += 20;
+    if (profile.company?.name || profile.company?.industry) completeness += 20;
+    if (profile.hiringPreferences?.categories?.length > 0) completeness += 20;
+
     const updatedProfile = await ClientProfile.findOneAndUpdate(
       { clientId },
-      { profilePicture: profilePictureUrl },
+      { profilePicture: profilePictureUrl, profileCompleteness: completeness },
       { new: true, runValidators: true }
     );
 
