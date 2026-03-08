@@ -7,6 +7,7 @@ import {
   updateFreelancerProfile,
   uploadProfilePicture,
 } from "../controllers/freelancer.js";
+import { searchJobs } from "../controllers/job.js";
 import { verifyToken } from "../middlewares/middleware.js";
 import { rateLimiter } from "../middlewares/rateLimiter.js";
 import { upload } from "../config/upload.js";
@@ -35,5 +36,7 @@ router.get(
 );
 
 router.get("/my-jobs", verifyToken, getFreelancerAcceptedJobs);
+
+router.get("/search-jobs", rateLimiter("matchedJobs"), searchJobs);
 
 export default router;
