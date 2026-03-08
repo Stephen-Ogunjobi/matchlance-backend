@@ -22,7 +22,7 @@ import type { IJob } from "../models/job.js";
 
 export const postFreelancerProfile = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<Response> => {
   try {
     const freelancerId = new mongoose.Types.ObjectId(req.params.freelancerId);
@@ -77,7 +77,7 @@ export const postFreelancerProfile = async (
 
 export const getFreelancerProfile = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<Response> => {
   try {
     const userId = req.user?.userId;
@@ -116,7 +116,7 @@ export const getFreelancerProfile = async (
 
 export const updateFreelancerProfile = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<Response> => {
   try {
     const userId = req.user?.userId;
@@ -153,7 +153,7 @@ export const updateFreelancerProfile = async (
         availability,
         location,
         languages,
-      }).filter(([_, value]) => value !== undefined)
+      }).filter(([_, value]) => value !== undefined),
     );
 
     if (Object.keys(updates).length === 0) {
@@ -166,12 +166,14 @@ export const updateFreelancerProfile = async (
       {
         new: true,
         runValidators: true,
-      }
+      },
     );
 
     // Update the cache with the new profile data
     if (updateProfile) {
-      await setFreelancerCache(updateProfile.toObject() as CachedFreelancerProfile);
+      await setFreelancerCache(
+        updateProfile.toObject() as CachedFreelancerProfile,
+      );
     }
 
     // If skills, categories, or other matching-related fields were updated, invalidate matched jobs cache
@@ -194,7 +196,7 @@ export const updateFreelancerProfile = async (
 
 export const uploadProfilePicture = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<Response> => {
   try {
     if (!req.file) {
@@ -236,12 +238,14 @@ export const uploadProfilePicture = async (
       {
         new: true,
         runValidators: true,
-      }
+      },
     );
 
     // Update the cache with the new profile picture
     if (updatedProfile) {
-      await setFreelancerCache(updatedProfile.toObject() as CachedFreelancerProfile);
+      await setFreelancerCache(
+        updatedProfile.toObject() as CachedFreelancerProfile,
+      );
     }
 
     return res.status(200).json({
@@ -269,7 +273,7 @@ export const uploadProfilePicture = async (
 
 export const getFreelancerMatchJobs = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<Response> => {
   try {
     const userId = req.user?.userId;
@@ -311,7 +315,6 @@ export const getFreelancerMatchJobs = async (
       await setFreelancerCache(profileData);
     }
 
-    // TypeScript guard: ensure freelancerProfile is not null
     if (!freelancerProfile) {
       return res.status(404).json({ error: "Profile could not be found" });
     }
@@ -368,7 +371,7 @@ export const getFreelancerMatchJobs = async (
 
 export const getFreelancerAcceptedJobs = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<Response> => {
   try {
     const freelancerId = req.user?.userId;
@@ -383,7 +386,9 @@ export const getFreelancerAcceptedJobs = async (
     }).populate("jobId");
 
     const acceptedJobs = acceptedProposals
-      .filter((proposal) => proposal.jobId && typeof proposal.jobId === "object")
+      .filter(
+        (proposal) => proposal.jobId && typeof proposal.jobId === "object",
+      )
       .map((proposal) => {
         const job = proposal.jobId as unknown as IJob;
         return {
