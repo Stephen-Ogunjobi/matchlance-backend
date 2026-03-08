@@ -150,7 +150,7 @@ const verifyEmail = async (req: Request, res: Response): Promise<Response> => {
 const initiateGoogleAuth = (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): void => {
   const role = req.query.role || "freelancer";
 
@@ -166,7 +166,7 @@ const initiateGoogleAuth = (
 
 const handleGoogleCallback = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<Response | void> => {
   try {
     const user = req.user;
@@ -216,12 +216,12 @@ const postLogin = async (req: Request, res: Response): Promise<Response> => {
       return res.status(400).json({ error: "Incorrect password" });
     }
 
-    if (!user.isEmailVerified) {
-      return res.status(403).json({
-        error: "Please verify your email before logging in",
-        emailNotVerified: true,
-      });
-    }
+    // if (!user.isEmailVerified) {
+    //   return res.status(403).json({
+    //     error: "Please verify your email before logging in",
+    //     emailNotVerified: true,
+    //   });
+    // }
 
     const accessToken = generateAccessToken(user._id);
     const refreshToken = generateRefreshToken(user._id);
@@ -331,7 +331,7 @@ const postLogout = async (req: Request, res: Response): Promise<Response> => {
 
 const postResetPassword = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<Response> => {
   try {
     const { email } = req.body;
@@ -368,7 +368,7 @@ const postResetPassword = async (
 
 const postNewPassword = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<Response> => {
   try {
     const { token, newPassword, confirmPassword } = req.body;
@@ -415,7 +415,7 @@ const verifyLogin = async (req: Request, res: Response): Promise<Response> => {
 
 const getCurrentUser = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<Response> => {
   try {
     const userId = req.user?.userId;
@@ -439,7 +439,7 @@ const getCurrentUser = async (
 
 const resendVerificationEmail = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<Response> => {
   try {
     const { email } = req.body;
