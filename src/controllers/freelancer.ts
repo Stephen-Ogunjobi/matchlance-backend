@@ -25,7 +25,7 @@ export const postFreelancerProfile = async (
   res: Response,
 ): Promise<Response> => {
   try {
-    const freelancerId = new mongoose.Types.ObjectId(req.params.freelancerId);
+    const userId = new mongoose.Types.ObjectId(req.params.userId);
 
     const {
       title,
@@ -39,7 +39,7 @@ export const postFreelancerProfile = async (
       languages,
     } = req.body;
 
-    const user = await User.findById(freelancerId);
+    const user = await User.findById(userId);
 
     if (!user) {
       return res.status(400).json({ error: "Invalid Request" });
@@ -50,7 +50,7 @@ export const postFreelancerProfile = async (
     }
 
     const newProfile = await FreelancerProfile.create({
-      freelancerId,
+      freelancerId: userId,
       bio,
       title,
       skills,

@@ -180,7 +180,6 @@ const freelancerProfileSchema = new Schema<IFreelancerProfile>(
         type: {
           type: String,
           enum: ["Point"],
-          default: "Point",
         },
         coordinates: {
           type: [Number],

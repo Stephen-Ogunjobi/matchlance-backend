@@ -14,7 +14,7 @@ import { upload } from "../config/upload.js";
 
 const router = express.Router();
 
-router.post("/profile/:freelancerId", postFreelancerProfile);
+router.post("/profile/:userId", postFreelancerProfile);
 
 router.get("/profile/:freelancerId", verifyToken, getFreelancerProfile);
 
@@ -25,14 +25,14 @@ router.post(
   verifyToken,
   rateLimiter("uploadPicture"),
   upload.single("profilePicture"), //handle file upload
-  uploadProfilePicture
+  uploadProfilePicture,
 );
 
 router.get(
   "/matched-jobs/:freelancerId",
   verifyToken,
   rateLimiter("matchedJobs"),
-  getFreelancerMatchJobs
+  getFreelancerMatchJobs,
 );
 
 router.get("/my-jobs", verifyToken, getFreelancerAcceptedJobs);
