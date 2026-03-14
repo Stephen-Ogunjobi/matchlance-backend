@@ -289,10 +289,16 @@ export const getFreelancerMatchJobs = async (
       return res.status(403).json({ error: "Forbidden" });
     }
 
-    // Try to get from cache first
-    const cachedJobs = await getCachedMatchedJobs(freelancerId);
-    if (cachedJobs) {
-      return res.status(200).json({ jobs: cachedJobs });
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string) || 20));
+    const skip = (page - 1) * limit;
+
+    // Try to get from cache first (only for first page with default limit)
+    if (page === 1 && limit === 20) {
+      const cachedJobs = await getCachedMatchedJobs(freelancerId);
+      if (cachedJobs) {
+        return res.status(200).json({ jobs: cachedJobs, page, limit, total: cachedJobs.length });
+      }
     }
 
     const existingProposals = await Proposal.find({ freelancerId })
@@ -301,7 +307,6 @@ export const getFreelancerMatchJobs = async (
 
     const appliedJobIds = existingProposals.map((p) => p.jobId.toString());
 
-    // Try to get from cache first
     let freelancerProfile = await getCachedFreelancerProfile(freelancerId);
 
     if (!freelancerProfile) {
@@ -311,12 +316,7 @@ export const getFreelancerMatchJobs = async (
       }
       const profileData = profile.toObject() as CachedFreelancerProfile;
       freelancerProfile = profileData;
-      // Cache the profile for future requests
       await setFreelancerCache(profileData);
-    }
-
-    if (!freelancerProfile) {
-      return res.status(404).json({ error: "Profile could not be found" });
     }
 
     const freelancerSkills = freelancerProfile.skills;
@@ -355,12 +355,16 @@ export const getFreelancerMatchJobs = async (
         },
       },
       { $sort: { score: -1 } },
+      { $skip: skip },
+      { $limit: limit },
     ]);
 
-    // Cache the results
-    await setMatchedJobsCache(freelancerId, matchJobs as CachedJob[]);
+    // Cache the first page results
+    if (page === 1 && limit === 20) {
+      await setMatchedJobsCache(freelancerId, matchJobs as CachedJob[]);
+    }
 
-    return res.status(200).json({ jobs: matchJobs });
+    return res.status(200).json({ jobs: matchJobs, page, limit });
   } catch (err) {
     console.error("Error fetching job", err);
     return res.status(500).json({
