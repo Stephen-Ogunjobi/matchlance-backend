@@ -383,64 +383,64 @@ export const searchJobs = async (
       limit = "10",
     } = req.query as Record<string, string>;
 
-    if (!keyword || keyword.trim().length === 0) {
-      return res.status(400).json({ error: "keyword is required" });
-    }
-
     const pageNum = Math.max(1, parseInt(page));
     const limitNum = Math.min(50, Math.max(1, parseInt(limit)));
     const skip = (pageNum - 1) * limitNum;
-    const trimmedKeyword = keyword.trim();
+    const trimmedKeyword = keyword?.trim();
 
     const filter: Record<string, unknown> = { status: "open" };
     if (category) filter.category = category;
     if (experienceLevel) filter.experienceLevel = experienceLevel;
 
-    const searchCondition = {
-      $or: [
-        { $text: { $search: trimmedKeyword } },
-        { title: { $regex: trimmedKeyword, $options: "i" } },
-        { description: { $regex: trimmedKeyword, $options: "i" } },
-        { skills: { $elemMatch: { $regex: trimmedKeyword, $options: "i" } } },
-      ],
-    };
+    const searchCondition = trimmedKeyword
+      ? {
+          $or: [
+            { $text: { $search: trimmedKeyword } },
+            { title: { $regex: trimmedKeyword, $options: "i" } },
+            { description: { $regex: trimmedKeyword, $options: "i" } },
+            { skills: { $elemMatch: { $regex: trimmedKeyword, $options: "i" } } },
+          ],
+        }
+      : {};
 
     const jobs = await Job.aggregate([
       { $match: { ...filter, ...searchCondition } },
       {
         $addFields: {
-          score: {
-            $add: [
-              { $ifNull: [{ $meta: "textScore" }, 0] },
-              {
-                $cond: [
-                  { $regexMatch: { input: "$title", regex: trimmedKeyword, options: "i" } },
-                  2,
-                  0,
-                ],
-              },
-              {
-                $cond: [
+          score: trimmedKeyword
+            ? {
+                $add: [
+                  { $ifNull: [{ $meta: "textScore" }, 0] },
                   {
-                    $gt: [
-                      {
-                        $size: {
-                          $filter: {
-                            input: "$skills",
-                            as: "s",
-                            cond: { $regexMatch: { input: "$$s", regex: trimmedKeyword, options: "i" } },
-                          },
-                        },
-                      },
+                    $cond: [
+                      { $regexMatch: { input: "$title", regex: trimmedKeyword, options: "i" } },
+                      2,
                       0,
                     ],
                   },
-                  1,
-                  0,
+                  {
+                    $cond: [
+                      {
+                        $gt: [
+                          {
+                            $size: {
+                              $filter: {
+                                input: "$skills",
+                                as: "s",
+                                cond: { $regexMatch: { input: "$$s", regex: trimmedKeyword, options: "i" } },
+                              },
+                            },
+                          },
+                          0,
+                        ],
+                      },
+                      1,
+                      0,
+                    ],
+                  },
                 ],
-              },
-            ],
-          },
+              }
+            : 0,
         },
       },
       { $sort: { score: -1, createdAt: -1 } },
