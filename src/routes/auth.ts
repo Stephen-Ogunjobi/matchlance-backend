@@ -26,7 +26,7 @@ router.get("/google", initiateGoogleAuth);
 router.get(
   "/google/callback",
   (req, res, next) => {
-    passport.authenticate("google", (err, user, info) => {
+    passport.authenticate("google", (err: Error | null, user: Express.User | false, info: object) => {
       if (err) {
         console.error("Passport authentication error:", err);
         return res.status(500).json({ error: "Authentication failed", details: err.message });
