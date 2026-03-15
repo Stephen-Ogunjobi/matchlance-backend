@@ -395,7 +395,6 @@ export const searchJobs = async (
     const searchCondition = trimmedKeyword
       ? {
           $or: [
-            { $text: { $search: trimmedKeyword } },
             { title: { $regex: trimmedKeyword, $options: "i" } },
             { description: { $regex: trimmedKeyword, $options: "i" } },
             { skills: { $elemMatch: { $regex: trimmedKeyword, $options: "i" } } },
@@ -410,7 +409,6 @@ export const searchJobs = async (
           score: trimmedKeyword
             ? {
                 $add: [
-                  { $ifNull: [{ $meta: "textScore" }, 0] },
                   {
                     $cond: [
                       { $regexMatch: { input: "$title", regex: trimmedKeyword, options: "i" } },
