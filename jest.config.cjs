@@ -17,6 +17,7 @@ module.exports = {
   },
   roots: ['<rootDir>/src'],
   testMatch: ['**/__tests__/**/*.test.ts', '**/_test/**/*.test.ts'],
+  testPathIgnorePatterns: ['/node_modules/', 'src/_test/setup.ts'],
   moduleFileExtensions: ['ts', 'js', 'json', 'node'],
   collectCoverageFrom: [
     'src/**/*.ts',
