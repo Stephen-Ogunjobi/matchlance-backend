@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
+import { redisClient, pubClient, subClient } from '../config/redis.js';
 import User from '../models/users.js';
 import {
   postSignup,
@@ -61,6 +62,9 @@ describe('Authentication System', () => {
   afterAll(async () => {
     await User.deleteMany({});
     await mongoose.connection.close();
+    await redisClient.quit();
+    await pubClient.quit();
+    await subClient.quit();
   });
 
   beforeEach(async () => {
