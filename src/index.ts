@@ -64,6 +64,10 @@ app.use(passport.initialize());
 //passport session integration
 app.use(passport.session());
 
+app.get("/health", (_req, res) => {
+  res.status(200).json({ status: "ok" });
+});
+
 app.use("/api/auth", authRoutes);
 app.use("/api/job", jobRoutes);
 app.use("/api/freelancer", freenlancerRoute);
