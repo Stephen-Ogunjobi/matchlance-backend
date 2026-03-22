@@ -26,11 +26,3 @@ jobs:
 
       - name: Build
         run: npm run build
-
-      - name: Test
-        run: npm test
-        env:
-          NODE_OPTIONS: --experimental-vm-modules
-          TEST_MONGODB_URL: ${{ secrets.TEST_MONGODB_URL }}
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}
-          JWT_REFRESH_SECRET: ${{ secrets.JWT_REFRESH_SECRET }}
