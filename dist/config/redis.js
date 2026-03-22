@@ -5,7 +5,8 @@ const redisConfig = {
     host: process.env.REDIS_HOST || "localhost",
     port: parseInt(process.env.REDIS_PORT || "6379"),
 };
-const baseRedisClient = new Redis(redisConfig);
+const createRedis = () => process.env.REDIS_URL ? new Redis(process.env.REDIS_URL) : new Redis(redisConfig);
+const baseRedisClient = createRedis();
 const originalSet = baseRedisClient.set.bind(baseRedisClient);
 baseRedisClient.set = function (key, value, 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -24,8 +25,8 @@ baseRedisClient.set = function (key, value,
 };
 export const redisClient = baseRedisClient;
 //socket.io adapter clients
-export const pubClient = new Redis(redisConfig);
-export const subClient = new Redis(redisConfig);
+export const pubClient = createRedis();
+export const subClient = createRedis();
 pubClient.on("error", (err) => console.log("redis pubClient error:", err));
 subClient.on("error", (err) => console.log("redis subClient error:", err));
 redisClient.on("error", (err) => console.log("redis client error:", err));
