@@ -38,7 +38,7 @@ const verifyToken = async (req: Request, res: Response, next: NextFunction): Pro
       };
       next();
       return;
-    } catch (err) {
+    } catch (_err) {
       // Token expired or invalid — fall through to refresh attempt
     }
   }
@@ -74,7 +74,7 @@ const verifyToken = async (req: Request, res: Response, next: NextFunction): Pro
       role: user.role,
     };
     next();
-  } catch (err) {
+  } catch (_err) {
     res.status(401).json({ message: "Unauthorized" });
   }
 };

@@ -1,7 +1,12 @@
 import path from "path";
 import fs from "fs";
 import multer from "multer";
+import type { Request } from "express";
 import type { FileFilterCallback } from "multer";
+
+interface AuthenticatedRequest extends Request {
+  user?: { userId?: string };
+}
 
 const uploadDir = "uploads/profile-pictures";
 
@@ -12,11 +17,11 @@ if (!fs.existsSync(uploadDir)) {
 
 // save files to disk
 const storage = multer.diskStorage({
-  destination: (req: any, file, cb) => {
+  destination: (req: AuthenticatedRequest, file, cb) => {
     cb(null, uploadDir);
   },
 
-  filename: (req: any, file, cb) => {
+  filename: (req: AuthenticatedRequest, file, cb) => {
     const userId = req.user?.userId || "unknown";
 
     const extension = path.extname(file.originalname).toLowerCase();
@@ -43,7 +48,7 @@ const fileFilter = (
   if (allowedMimeTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    const error = new Error(`Invalid file type`) as any;
+    const error = new Error(`Invalid file type`) as Error & { code: string };
     error.code = "INVALID_FILE_TYPE";
 
     cb(error, false);
@@ -61,7 +66,7 @@ export const upload = multer({
 });
 
 export const deleteFile = (filePath: string): Promise<void> => {
-  return new Promise((resolve: any, reject) => {
+  return new Promise((resolve, reject) => {
     if (!fs.existsSync(filePath)) {
       resolve();
       return;
@@ -91,11 +96,11 @@ if (!fs.existsSync(proposalAttachDir)) {
 }
 
 const proposalStorage = multer.diskStorage({
-  destination: (req: any, file, cb) => {
+  destination: (req: AuthenticatedRequest, file, cb) => {
     cb(null, proposalAttachDir);
   },
 
-  filename: (req: any, file, cb) => {
+  filename: (req: AuthenticatedRequest, file, cb) => {
     const userId = req.user?.userId || "unknown";
     const jobId = req.params?.jobId || "unknown";
 
@@ -126,7 +131,7 @@ const proposalFileFilter = (
   if (allowedMimeTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    const error = new Error(`Invalid file`) as any;
+    const error = new Error(`Invalid file`) as Error & { code: string };
     error.code = "INVALID_FILE_TYPE";
     cb(error, false);
   }

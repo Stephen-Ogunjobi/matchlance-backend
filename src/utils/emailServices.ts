@@ -4,6 +4,27 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+type SendGridError = { response?: { body: unknown } };
+const isSendGridError = (e: unknown): e is SendGridError =>
+  typeof e === "object" && e !== null;
+
+interface ProposalNotificationDetails {
+  proposedBudget?: number | string;
+  estimatedTime?: string;
+  coverLetter?: string;
+}
+
+interface ProposalAcceptanceDetails {
+  proposedBudget?: { min?: number; max?: number };
+  estimatedTime?: string;
+}
+
+interface ContractDetails {
+  _id: string;
+  budget: { type: string; amount: number };
+  duration: { startDate: string | Date };
+}
+
 sgMail.setApiKey(process.env.SENDGRID_API_KEY!);
 
 const FROM_EMAIL = process.env.SENDGRID_FROM_EMAIL || "noreply@matchlance.com";
@@ -68,9 +89,9 @@ export const sendVerificationEmail = async (
     await sgMail.send(msg);
     console.log(`Verification email sent to ${email}`);
     return { success: true };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("SendGrid verification email error:", error);
-    if (error.response) {
+    if (isSendGridError(error) && error.response) {
       console.error(error.response.body);
     }
     return { success: false, error };
@@ -132,9 +153,9 @@ export const sendPasswordResetEmail = async (
     await sgMail.send(msg);
     console.log(`Password reset email sent to ${email}`);
     return { success: true };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("SendGrid reset email error:", error);
-    if (error.response) {
+    if (isSendGridError(error) && error.response) {
       console.error(error.response.body);
     }
     return { success: false, error };
@@ -146,7 +167,7 @@ export const sendProposalNotificationEmail = async (
   firstName: string,
   jobTitle: string,
   freelancerName: string,
-  proposalDetails: any
+  proposalDetails: ProposalNotificationDetails
 ) => {
   const proposalUrl = `${process.env.FRONTEND_PROPOSAL_URL}`;
 
@@ -283,9 +304,9 @@ export const sendProposalNotificationEmail = async (
       `Proposal notification email sent to ${email} for job "${jobTitle}"`
     );
     return { success: true };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("SendGrid proposal email error:", error);
-    if (error.response) {
+    if (isSendGridError(error) && error.response) {
       console.error(error.response.body);
     }
     return { success: false, error };
@@ -297,7 +318,7 @@ export const sendProposalAcceptanceEmail = async (
   freelancerName: string,
   jobTitle: string,
   clientName: string,
-  proposalDetails: any
+  proposalDetails: ProposalAcceptanceDetails
 ) => {
   const projectUrl = `${
     process.env.FRONTEND_PROJECT_URL || process.env.FRONTEND_URL
@@ -472,9 +493,9 @@ export const sendProposalAcceptanceEmail = async (
       `Proposal acceptance email sent to ${email} for job "${jobTitle}"`
     );
     return { success: true };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("SendGrid proposal acceptance email error:", error);
-    if (error.response) {
+    if (isSendGridError(error) && error.response) {
       console.error(error.response.body);
     }
     return { success: false, error };
@@ -486,7 +507,7 @@ export const sendFreelancerHiredEmail = async (
   freelancerName: string,
   clientName: string,
   jobTitle: string,
-  contractDetails: any
+  contractDetails: ContractDetails
 ) => {
   const contractUrl = `${
     process.env.FRONTEND_CONTRACT_URL || process.env.FRONTEND_URL
@@ -686,9 +707,9 @@ export const sendFreelancerHiredEmail = async (
       `Freelancer hired email sent to ${email} for project "${jobTitle}"`
     );
     return { success: true };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("SendGrid freelancer hired email error:", error);
-    if (error.response) {
+    if (isSendGridError(error) && error.response) {
       console.error(error.response.body);
     }
     return { success: false, error };

@@ -169,8 +169,9 @@ export const rateLimiter = (type: RateLimiterType) => {
     try {
       await limiter.consume(key);
       next();
-    } catch (rateLimiterRes: any) {
-      const retryAfter = Math.ceil(rateLimiterRes.msBeforeNext / 1000);
+    } catch (rateLimiterRes: unknown) {
+      const msBeforeNext = (rateLimiterRes as { msBeforeNext?: number })?.msBeforeNext ?? 0;
+      const retryAfter = Math.ceil(msBeforeNext / 1000);
 
       res.set("Retry-After", String(retryAfter));
       res.status(429).json({

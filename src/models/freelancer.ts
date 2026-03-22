@@ -246,7 +246,7 @@ const freelancerProfileSchema = new Schema<IFreelancerProfile>(
       ],
       required: [true, "At least one language is required"],
       validate: {
-        validator: function (langs: any[]) {
+        validator: function (langs: unknown[]) {
           return langs.length >= 1;
         },
         message: "At least one language is required",
@@ -308,14 +308,14 @@ freelancerProfileSchema.index({
 });
 
 // Validate hourly rate range
-freelancerProfileSchema.pre("validate", function (next) {
+freelancerProfileSchema.pre("validate", function (_next) {
   if (this.hourlyRate.max < this.hourlyRate.min) {
     throw new Error("Maximum rate cannot be less than minimum rate");
   }
 });
 
 // Auto-calculate profile completeness before save
-freelancerProfileSchema.pre("save", function (next) {
+freelancerProfileSchema.pre("save", function (_next) {
   let completeness = 0;
   const weights = {
     basic: 40, // bio, title, skills, categories, experience, hourly rate
@@ -345,7 +345,7 @@ freelancerProfileSchema.pre("save", function (next) {
 });
 
 // Generate search keywords before save
-freelancerProfileSchema.pre("save", function (next) {
+freelancerProfileSchema.pre("save", function (_next) {
   const keywords = new Set<string>();
 
   // Add from title and bio

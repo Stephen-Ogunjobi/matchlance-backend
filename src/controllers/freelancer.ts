@@ -12,8 +12,6 @@ import {
 } from "../utils/jobCache.js";
 import {
   getCachedFreelancerProfile,
-  invalidateFreelancerCache,
-  updateFreelancerCache,
   setFreelancerCache,
   type CachedFreelancerProfile,
 } from "../utils/freelancerCache.js";

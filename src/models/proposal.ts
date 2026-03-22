@@ -134,7 +134,7 @@ proposalSchema.index({ jobId: 1, status: 1 }); // Query proposals by job and sta
 proposalSchema.index({ freelancerId: 1, status: 1 }); // Query freelancer's proposals by status
 proposalSchema.index({ createdAt: -1 }); // Sort by most recent
 
-proposalSchema.pre("validate", function (greater) {
+proposalSchema.pre("validate", function (_greater) {
   if (this.proposedBudget.max < this.proposedBudget.min) {
     throw new Error("Maximum budget cannot be less than minimum budget");
   }

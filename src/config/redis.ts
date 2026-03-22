@@ -14,6 +14,7 @@ const originalSet = baseRedisClient.set.bind(baseRedisClient);
 baseRedisClient.set = function (
   key: string | Buffer,
   value: string | Buffer | number,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ...args: any[]
 ) {
   const filteredArgs = args.filter((arg) => {
@@ -26,6 +27,7 @@ baseRedisClient.set = function (
     return true;
   });
   return originalSet(key, value, ...filteredArgs);
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 } as any;
 
 export const redisClient = baseRedisClient;
