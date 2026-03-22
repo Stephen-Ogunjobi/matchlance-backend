@@ -1,0 +1,1 @@
+{"version":3,"file":"markAsReadHandler.d.ts","sourceRoot":"","sources":["../../../../src/utils/socket/handlers/markAsReadHandler.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,MAAM,IAAI,cAAc,EAAE,MAAM,WAAW,CAAC;AAK1D,OAAO,KAAK,EAAE,mBAAmB,EAAE,MAAM,aAAa,CAAC;AAQvD,eAAO,MAAM,gBAAgB,GAC3B,QAAQ,mBAAmB,EAC3B,IAAI,cAAc,EAClB,MAAM,OAAO,kBAyId,CAAC"}

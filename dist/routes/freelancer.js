@@ -1,0 +1,17 @@
+import express from "express";
+import { getFreelancerAcceptedJobs, getFreelancerMatchJobs, getFreelancerProfile, postFreelancerProfile, updateFreelancerProfile, uploadProfilePicture, } from "../controllers/freelancer.js";
+import { searchJobs } from "../controllers/job.js";
+import { verifyToken } from "../middlewares/middleware.js";
+import { rateLimiter } from "../middlewares/rateLimiter.js";
+import { upload } from "../config/upload.js";
+const router = express.Router();
+router.post("/profile/:userId", postFreelancerProfile);
+router.get("/profile/:freelancerId", verifyToken, getFreelancerProfile);
+router.patch("/profile/:freelancerId", verifyToken, updateFreelancerProfile);
+router.post("/profile/:freelancerId/upload-picture", verifyToken, rateLimiter("uploadPicture"), upload.single("profilePicture"), //handle file upload
+uploadProfilePicture);
+router.get("/matched-jobs/:freelancerId", verifyToken, rateLimiter("matchedJobs"), getFreelancerMatchJobs);
+router.get("/my-jobs", verifyToken, getFreelancerAcceptedJobs);
+router.get("/search-jobs", rateLimiter("matchedJobs"), searchJobs);
+export default router;
+//# sourceMappingURL=freelancer.js.map

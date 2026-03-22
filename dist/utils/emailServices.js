@@ -1,55 +1,25 @@
 import sgMail from "@sendgrid/mail";
 import crypto from "crypto";
 import dotenv from "dotenv";
-
 dotenv.config();
-
-type SendGridError = { response?: { body: unknown } };
-const isSendGridError = (e: unknown): e is SendGridError =>
-  typeof e === "object" && e !== null;
-
-interface ProposalNotificationDetails {
-  proposedBudget?: { min?: number; max?: number } | number | string;
-  estimatedTime?: string;
-  coverLetter?: string;
-}
-
-interface ProposalAcceptanceDetails {
-  proposedBudget?: { min?: number; max?: number };
-  estimatedTime?: string;
-}
-
-interface ContractDetails {
-  _id: string;
-  budget: { type: string; amount: number };
-  duration: { startDate: string | Date };
-}
-
-sgMail.setApiKey(process.env.SENDGRID_API_KEY!);
-
+const isSendGridError = (e) => typeof e === "object" && e !== null;
+sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 const FROM_EMAIL = process.env.SENDGRID_FROM_EMAIL || "noreply@matchlance.com";
 const FROM_NAME = process.env.SENDGRID_FROM_NAME || "Matchlance";
-
-export const generateToken = (): string => {
-  return crypto.randomBytes(32).toString("hex");
+export const generateToken = () => {
+    return crypto.randomBytes(32).toString("hex");
 };
-
-export const sendVerificationEmail = async (
-  email: string,
-  firstName: string,
-  token: string
-) => {
-  const verifyUrl = `${process.env.FRONTEND_VERIFY_URL}?token=${token}`;
-
-  const msg = {
-    to: email,
-    from: {
-      email: FROM_EMAIL,
-      name: FROM_NAME,
-    },
-    subject: "Verify Your Email",
-    text: `Hi ${firstName}, \n\nWellcome! Please verify your email by clicking the link below:\n\n${verifyUrl}\n\nThis link will expire in 24 hours.\n\nIf you didn't create an account, please ignore this email.`,
-    html: `
+export const sendVerificationEmail = async (email, firstName, token) => {
+    const verifyUrl = `${process.env.FRONTEND_VERIFY_URL}?token=${token}`;
+    const msg = {
+        to: email,
+        from: {
+            email: FROM_EMAIL,
+            name: FROM_NAME,
+        },
+        subject: "Verify Your Email",
+        text: `Hi ${firstName}, \n\nWellcome! Please verify your email by clicking the link below:\n\n${verifyUrl}\n\nThis link will expire in 24 hours.\n\nIf you didn't create an account, please ignore this email.`,
+        html: `
     <!DOCTYPE html>
       <html>
         <head>
@@ -84,36 +54,31 @@ export const sendVerificationEmail = async (
       </html>
 
     `,
-  };
-  try {
-    await sgMail.send(msg);
-    console.log(`Verification email sent to ${email}`);
-    return { success: true };
-  } catch (error: unknown) {
-    console.error("SendGrid verification email error:", error);
-    if (isSendGridError(error) && error.response) {
-      console.error(error.response.body);
+    };
+    try {
+        await sgMail.send(msg);
+        console.log(`Verification email sent to ${email}`);
+        return { success: true };
     }
-    return { success: false, error };
-  }
+    catch (error) {
+        console.error("SendGrid verification email error:", error);
+        if (isSendGridError(error) && error.response) {
+            console.error(error.response.body);
+        }
+        return { success: false, error };
+    }
 };
-
-export const sendPasswordResetEmail = async (
-  email: string,
-  firstName: string,
-  token: string
-) => {
-  const resetUrl = `${process.env.FRONTEND_RESET_PASSWORD_URL}?token=${token}`;
-
-  const msg = {
-    to: email,
-    from: {
-      email: FROM_EMAIL,
-      name: FROM_NAME,
-    },
-    subject: "Reset Your Password - Matchlance",
-    text: `Hi ${firstName},\n\nYou requested to reset your password. Click the link below to reset it:\n\n${resetUrl}\n\nThis link will expire in 1 hour.\n\nIf you didn't request a password reset, please ignore this email.`,
-    html: `
+export const sendPasswordResetEmail = async (email, firstName, token) => {
+    const resetUrl = `${process.env.FRONTEND_RESET_PASSWORD_URL}?token=${token}`;
+    const msg = {
+        to: email,
+        from: {
+            email: FROM_EMAIL,
+            name: FROM_NAME,
+        },
+        subject: "Reset Your Password - Matchlance",
+        text: `Hi ${firstName},\n\nYou requested to reset your password. Click the link below to reset it:\n\n${resetUrl}\n\nThis link will expire in 1 hour.\n\nIf you didn't request a password reset, please ignore this email.`,
+        html: `
       <!DOCTYPE html>
       <html>
         <head>
@@ -148,50 +113,42 @@ export const sendPasswordResetEmail = async (
         </body>
       </html>
     `,
-  };
-  try {
-    await sgMail.send(msg);
-    console.log(`Password reset email sent to ${email}`);
-    return { success: true };
-  } catch (error: unknown) {
-    console.error("SendGrid reset email error:", error);
-    if (isSendGridError(error) && error.response) {
-      console.error(error.response.body);
+    };
+    try {
+        await sgMail.send(msg);
+        console.log(`Password reset email sent to ${email}`);
+        return { success: true };
     }
-    return { success: false, error };
-  }
+    catch (error) {
+        console.error("SendGrid reset email error:", error);
+        if (isSendGridError(error) && error.response) {
+            console.error(error.response.body);
+        }
+        return { success: false, error };
+    }
 };
-
-export const sendProposalNotificationEmail = async (
-  email: string,
-  firstName: string,
-  jobTitle: string,
-  freelancerName: string,
-  proposalDetails: ProposalNotificationDetails
-) => {
-  const proposalUrl = `${process.env.FRONTEND_PROPOSAL_URL}`;
-
-  // Extract proposal details
-  const pb = proposalDetails.proposedBudget;
-  const budget = pb
-    ? typeof pb === "object"
-      ? `$${pb.min ?? ""} - $${pb.max ?? ""}`
-      : `$${pb}`
-    : "Not specified";
-  const estimatedTime = proposalDetails.estimatedTime || "Not specified";
-  const coverLetterPreview = proposalDetails.coverLetter
-    ? proposalDetails.coverLetter.substring(0, 150) + "..."
-    : "No cover letter provided";
-
-  const msg = {
-    to: email,
-    from: {
-      email: FROM_EMAIL,
-      name: FROM_NAME,
-    },
-    subject: `New Proposal Received for "${jobTitle}"`,
-    text: `Hi ${firstName},\n\nGood news! You've received a new proposal for your job "${jobTitle}".\n\nFreelancer: ${freelancerName}\nProposed Budget: ${budget}\nEstimated Time: ${estimatedTime}\n\nCover Letter Preview:\n${coverLetterPreview}\n\nClick the link below to view the full proposal and freelancer profile:\n${proposalUrl}\n\nBest regards,\nThe Matchlance Team`,
-    html: `
+export const sendProposalNotificationEmail = async (email, firstName, jobTitle, freelancerName, proposalDetails) => {
+    const proposalUrl = `${process.env.FRONTEND_PROPOSAL_URL}`;
+    // Extract proposal details
+    const pb = proposalDetails.proposedBudget;
+    const budget = pb
+        ? typeof pb === "object"
+            ? `$${pb.min ?? ""} - $${pb.max ?? ""}`
+            : `$${pb}`
+        : "Not specified";
+    const estimatedTime = proposalDetails.estimatedTime || "Not specified";
+    const coverLetterPreview = proposalDetails.coverLetter
+        ? proposalDetails.coverLetter.substring(0, 150) + "..."
+        : "No cover letter provided";
+    const msg = {
+        to: email,
+        from: {
+            email: FROM_EMAIL,
+            name: FROM_NAME,
+        },
+        subject: `New Proposal Received for "${jobTitle}"`,
+        text: `Hi ${firstName},\n\nGood news! You've received a new proposal for your job "${jobTitle}".\n\nFreelancer: ${freelancerName}\nProposed Budget: ${budget}\nEstimated Time: ${estimatedTime}\n\nCover Letter Preview:\n${coverLetterPreview}\n\nClick the link below to view the full proposal and freelancer profile:\n${proposalUrl}\n\nBest regards,\nThe Matchlance Team`,
+        html: `
       <!DOCTYPE html>
       <html>
         <head>
@@ -299,49 +256,36 @@ export const sendProposalNotificationEmail = async (
         </body>
       </html>
     `,
-  };
-
-  try {
-    await sgMail.send(msg);
-    console.log(
-      `Proposal notification email sent to ${email} for job "${jobTitle}"`
-    );
-    return { success: true };
-  } catch (error: unknown) {
-    console.error("SendGrid proposal email error:", error);
-    if (isSendGridError(error) && error.response) {
-      console.error(error.response.body);
+    };
+    try {
+        await sgMail.send(msg);
+        console.log(`Proposal notification email sent to ${email} for job "${jobTitle}"`);
+        return { success: true };
     }
-    return { success: false, error };
-  }
+    catch (error) {
+        console.error("SendGrid proposal email error:", error);
+        if (isSendGridError(error) && error.response) {
+            console.error(error.response.body);
+        }
+        return { success: false, error };
+    }
 };
-
-export const sendProposalAcceptanceEmail = async (
-  email: string,
-  freelancerName: string,
-  jobTitle: string,
-  clientName: string,
-  proposalDetails: ProposalAcceptanceDetails
-) => {
-  const projectUrl = `${
-    process.env.FRONTEND_PROJECT_URL || process.env.FRONTEND_URL
-  }`;
-
-  // Extract proposal details
-  const budget = proposalDetails.proposedBudget
-    ? `$${proposalDetails.proposedBudget.min} - $${proposalDetails.proposedBudget.max}`
-    : "Not specified";
-  const estimatedTime = proposalDetails.estimatedTime || "Not specified";
-
-  const msg = {
-    to: email,
-    from: {
-      email: FROM_EMAIL,
-      name: FROM_NAME,
-    },
-    subject: `Congratulations! Your Proposal for "${jobTitle}" Has Been Accepted`,
-    text: `Hi ${freelancerName},\n\nCongratulations! Your proposal for "${jobTitle}" has been accepted.\n\nYour Proposal Details:\nProposed Budget: ${budget}\nEstimated Time: ${estimatedTime}\n\nNext Steps:\n1. Review the project details and confirm your availability\n2. Reach out to ${clientName} to discuss project kickoff\n3. Set up milestones and deliverables\n4. Start working on the project\n\nClick the link below to view the project and get started:\n${projectUrl}\n\nGood luck with your project!\n\nBest regards,\nThe Matchlance Team`,
-    html: `
+export const sendProposalAcceptanceEmail = async (email, freelancerName, jobTitle, clientName, proposalDetails) => {
+    const projectUrl = `${process.env.FRONTEND_PROJECT_URL || process.env.FRONTEND_URL}`;
+    // Extract proposal details
+    const budget = proposalDetails.proposedBudget
+        ? `$${proposalDetails.proposedBudget.min} - $${proposalDetails.proposedBudget.max}`
+        : "Not specified";
+    const estimatedTime = proposalDetails.estimatedTime || "Not specified";
+    const msg = {
+        to: email,
+        from: {
+            email: FROM_EMAIL,
+            name: FROM_NAME,
+        },
+        subject: `Congratulations! Your Proposal for "${jobTitle}" Has Been Accepted`,
+        text: `Hi ${freelancerName},\n\nCongratulations! Your proposal for "${jobTitle}" has been accepted.\n\nYour Proposal Details:\nProposed Budget: ${budget}\nEstimated Time: ${estimatedTime}\n\nNext Steps:\n1. Review the project details and confirm your availability\n2. Reach out to ${clientName} to discuss project kickoff\n3. Set up milestones and deliverables\n4. Start working on the project\n\nClick the link below to view the project and get started:\n${projectUrl}\n\nGood luck with your project!\n\nBest regards,\nThe Matchlance Team`,
+        html: `
       <!DOCTYPE html>
       <html>
         <head>
@@ -488,50 +432,36 @@ export const sendProposalAcceptanceEmail = async (
         </body>
       </html>
     `,
-  };
-
-  try {
-    await sgMail.send(msg);
-    console.log(
-      `Proposal acceptance email sent to ${email} for job "${jobTitle}"`
-    );
-    return { success: true };
-  } catch (error: unknown) {
-    console.error("SendGrid proposal acceptance email error:", error);
-    if (isSendGridError(error) && error.response) {
-      console.error(error.response.body);
+    };
+    try {
+        await sgMail.send(msg);
+        console.log(`Proposal acceptance email sent to ${email} for job "${jobTitle}"`);
+        return { success: true };
     }
-    return { success: false, error };
-  }
+    catch (error) {
+        console.error("SendGrid proposal acceptance email error:", error);
+        if (isSendGridError(error) && error.response) {
+            console.error(error.response.body);
+        }
+        return { success: false, error };
+    }
 };
-
-export const sendFreelancerHiredEmail = async (
-  email: string,
-  freelancerName: string,
-  clientName: string,
-  jobTitle: string,
-  contractDetails: ContractDetails
-) => {
-  const contractUrl = `${
-    process.env.FRONTEND_CONTRACT_URL || process.env.FRONTEND_URL
-  }/contracts/${contractDetails._id}`;
-
-  // Extract contract details
-  const budget =
-    contractDetails.budget.type === "fixed"
-      ? `$${contractDetails.budget.amount} (Fixed Price)`
-      : `$${contractDetails.budget.amount}/hour`;
-  const startDate = new Date(contractDetails.duration.startDate).toLocaleDateString();
-
-  const msg = {
-    to: email,
-    from: {
-      email: FROM_EMAIL,
-      name: FROM_NAME,
-    },
-    subject: `🎉 You're Hired! ${clientName} wants to work with you`,
-    text: `Hi ${freelancerName},\n\nCongratulations! ${clientName} has chosen you for their project "${jobTitle}".\n\nProject: ${jobTitle}\nBudget: ${budget}\nStart Date: ${startDate}\n\nWhat's Next:\n1. Review the project details\n2. Connect with ${clientName} to discuss the work\n3. Start delivering amazing results!\n\nView your new project:\n${contractUrl}\n\nLet's make this project a success!\n\nBest regards,\nThe Matchlance Team`,
-    html: `
+export const sendFreelancerHiredEmail = async (email, freelancerName, clientName, jobTitle, contractDetails) => {
+    const contractUrl = `${process.env.FRONTEND_CONTRACT_URL || process.env.FRONTEND_URL}/contracts/${contractDetails._id}`;
+    // Extract contract details
+    const budget = contractDetails.budget.type === "fixed"
+        ? `$${contractDetails.budget.amount} (Fixed Price)`
+        : `$${contractDetails.budget.amount}/hour`;
+    const startDate = new Date(contractDetails.duration.startDate).toLocaleDateString();
+    const msg = {
+        to: email,
+        from: {
+            email: FROM_EMAIL,
+            name: FROM_NAME,
+        },
+        subject: `🎉 You're Hired! ${clientName} wants to work with you`,
+        text: `Hi ${freelancerName},\n\nCongratulations! ${clientName} has chosen you for their project "${jobTitle}".\n\nProject: ${jobTitle}\nBudget: ${budget}\nStart Date: ${startDate}\n\nWhat's Next:\n1. Review the project details\n2. Connect with ${clientName} to discuss the work\n3. Start delivering amazing results!\n\nView your new project:\n${contractUrl}\n\nLet's make this project a success!\n\nBest regards,\nThe Matchlance Team`,
+        html: `
       <!DOCTYPE html>
       <html>
         <head>
@@ -702,19 +632,18 @@ export const sendFreelancerHiredEmail = async (
         </body>
       </html>
     `,
-  };
-
-  try {
-    await sgMail.send(msg);
-    console.log(
-      `Freelancer hired email sent to ${email} for project "${jobTitle}"`
-    );
-    return { success: true };
-  } catch (error: unknown) {
-    console.error("SendGrid freelancer hired email error:", error);
-    if (isSendGridError(error) && error.response) {
-      console.error(error.response.body);
+    };
+    try {
+        await sgMail.send(msg);
+        console.log(`Freelancer hired email sent to ${email} for project "${jobTitle}"`);
+        return { success: true };
     }
-    return { success: false, error };
-  }
+    catch (error) {
+        console.error("SendGrid freelancer hired email error:", error);
+        if (isSendGridError(error) && error.response) {
+            console.error(error.response.body);
+        }
+        return { success: false, error };
+    }
 };
+//# sourceMappingURL=emailServices.js.map

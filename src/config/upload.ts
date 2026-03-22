@@ -6,6 +6,7 @@ import type { FileFilterCallback } from "multer";
 
 interface AuthenticatedRequest extends Request {
   user?: { userId?: string };
+  params: Record<string, string>;
 }
 
 const uploadDir = "uploads/profile-pictures";
@@ -17,12 +18,12 @@ if (!fs.existsSync(uploadDir)) {
 
 // save files to disk
 const storage = multer.diskStorage({
-  destination: (req: AuthenticatedRequest, file, cb) => {
+  destination: (req, _file, cb) => {
     cb(null, uploadDir);
   },
 
-  filename: (req: AuthenticatedRequest, file, cb) => {
-    const userId = req.user?.userId || "unknown";
+  filename: (req, file, cb) => {
+    const userId = (req as AuthenticatedRequest).user?.userId || "unknown";
 
     const extension = path.extname(file.originalname).toLowerCase();
 
@@ -51,7 +52,7 @@ const fileFilter = (
     const error = new Error(`Invalid file type`) as Error & { code: string };
     error.code = "INVALID_FILE_TYPE";
 
-    cb(error, false);
+    cb(error);
   }
 };
 
@@ -96,13 +97,13 @@ if (!fs.existsSync(proposalAttachDir)) {
 }
 
 const proposalStorage = multer.diskStorage({
-  destination: (req: AuthenticatedRequest, file, cb) => {
+  destination: (_req, _file, cb) => {
     cb(null, proposalAttachDir);
   },
 
-  filename: (req: AuthenticatedRequest, file, cb) => {
-    const userId = req.user?.userId || "unknown";
-    const jobId = req.params?.jobId || "unknown";
+  filename: (req, file, cb) => {
+    const userId = (req as AuthenticatedRequest).user?.userId || "unknown";
+    const jobId = req.params?.["jobId"] || "unknown";
 
     const extension = path.extname(file.originalname).toLocaleLowerCase();
 
@@ -133,7 +134,7 @@ const proposalFileFilter = (
   } else {
     const error = new Error(`Invalid file`) as Error & { code: string };
     error.code = "INVALID_FILE_TYPE";
-    cb(error, false);
+    cb(error);
   }
 };
 

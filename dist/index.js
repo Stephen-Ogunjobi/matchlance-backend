@@ -1,0 +1,69 @@
+import express from "express";
+import dotenv from "dotenv";
+import session from "express-session";
+import { RedisStore } from "connect-redis";
+import cookieParser from "cookie-parser";
+import { createServer } from "http";
+import connectDb from "./utils/db.js";
+import authRoutes from "./routes/auth.js";
+import jobRoutes from "./routes/job.js";
+import freenlancerRoute from "./routes/freelancer.js";
+import proposalRoutes from "./routes/proposal.js";
+import chatRoutes from "./routes/chat.js";
+import contractRoutes from "./routes/contract.js";
+import clientRoutes from "./routes/client.js";
+import passport from "passport";
+import cors from "cors";
+import "./config/passport.js";
+import { initializeSocket } from "./utils/socket.js";
+import { redisClient } from "./config/redis.js";
+dotenv.config();
+const app = express();
+const server = createServer(app);
+//redis store initialized
+const redisStore = new RedisStore({
+    client: redisClient,
+    prefix: "matchlance:sess:",
+});
+app.use(cors({
+    origin: process.env.FRONTEND_URL || "http://localhost:5173",
+    credentials: true,
+}));
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ limit: "10mb", extended: true }));
+app.use(cookieParser());
+// Serve uploaded files from /uploads directory
+// Makes files accessible via: http://localhost:3001/uploads/...
+app.use("/uploads", express.static("uploads"));
+//session middleware with redis
+app.use(session({
+    store: redisStore,
+    secret: process.env.SESSION_SECRET || "secret",
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+        secure: process.env.NODE_ENV === "production",
+        httpOnly: true,
+        maxAge: 1000 * 60 * 60 * 24,
+        sameSite: "lax",
+    },
+}));
+app.use(passport.initialize());
+//passport session integration
+app.use(passport.session());
+app.use("/api/auth", authRoutes);
+app.use("/api/job", jobRoutes);
+app.use("/api/freelancer", freenlancerRoute);
+app.use("/api/proposal", proposalRoutes);
+app.use("/api/chat", chatRoutes);
+app.use("/api/contract", contractRoutes);
+app.use("/api/client", clientRoutes);
+const PORT = process.env.PORT || 3001;
+//initialize socket before starting server
+const io = initializeSocket(server);
+connectDb().then(() => {
+    server.listen(PORT, () => {
+        console.log(`server running ${PORT}`);
+    });
+});
+//# sourceMappingURL=index.js.map

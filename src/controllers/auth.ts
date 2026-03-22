@@ -170,7 +170,7 @@ const handleGoogleCallback = async (
 ): Promise<Response | void> => {
   try {
     const user = req.user;
-    if (!user || !user.save) {
+    if (!user || !user.save || !user._id) {
       return res.status(500).json({ message: "Something went wrong" });
     }
 
