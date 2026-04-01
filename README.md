@@ -62,54 +62,13 @@ npm install
 
 ```bash
 cp .env.example .env
-# Fill in the values below
+# Fill in your credentials
 ```
 
 **3. Start the development server**
 
 ```bash
 npm run dev
-```
-
-## Environment Variables
-
-```env
-PORT=3001
-FRONTEND_URL=http://localhost:5173
-NODE_ENV=development
-
-# MongoDB
-MONGODB_URL=mongodb+srv://<user>:<pass>@<host>/<db>
-TEST_MONGODB_URL=mongodb://localhost:27017/matchlance-test
-
-# JWT
-JWT_SECRET=<32-char hex>
-JWT_REFRESH_SECRET=<32-char hex>
-ACCESS_TOKEN_EXPIRES=15m
-REFRESH_TOKEN_EXPIRES=7d
-
-# Sessions
-SESSION_SECRET=<32-char hex>
-
-# Google OAuth
-GOOGLE_CLIENT_ID=
-GOOGLE_CLIENT_SECRET=
-GOOGLE_CALLBACK_URL=http://localhost:3001/api/auth/google/callback
-
-# SendGrid
-SENDGRID_API_KEY=SG.<key>
-SENDGRID_FROM_EMAIL=no-reply@yourdomain.com
-SENDGRID_FROM_NAME=Matchlance
-
-# Email redirect URLs
-BACKEND_VERIFY_URL=http://localhost:5173/verify-email
-FRONTEND_VERIFY_URL=http://localhost:5173/verify-email
-FRONTEND_RESET_PASSWORD_URL=http://localhost:5173/new-password
-FRONTEND_PROPOSAL_URL=http://localhost:5173/new-proposal
-
-# Redis
-REDIS_HOST=localhost
-REDIS_PORT=6379
 ```
 
 ## API Overview
